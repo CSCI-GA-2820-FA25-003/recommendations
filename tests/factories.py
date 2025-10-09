@@ -11,7 +11,7 @@ from service.models import Recommendation
 
 
 def _fake_confidence() -> Decimal:
-    return (Decimal(random.randint(0, 100)) / Decimal("100")).quantize(Decimal("0.00"))
+    return Decimal(random.randrange(-99, 100)) / Decimal(100)
 
 
 class RecommendationFactory(factory.Factory):

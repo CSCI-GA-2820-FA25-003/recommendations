@@ -41,7 +41,7 @@ class Recommendation(db.Model):
     recommended_product_id = db.Column(db.Integer, nullable=False)
     recommendation_type = db.Column(REC_TYPE_ENUM, nullable=False)
     status = db.Column(STATUS_ENUM, nullable=False, default="active")
-    confidence_score = db.Column(db.Numeric(5, 2), nullable=False)
+    confidence_score = db.Column(db.Numeric(2, 2), nullable=False)
     base_product_price = db.Column(db.Numeric(14, 2), nullable=True)
     recommended_product_price = db.Column(db.Numeric(14, 2), nullable=True)
     base_product_description = db.Column(db.String(1023))
