@@ -40,6 +40,7 @@ def index():
             version="1.0",
             message="Welcome to the Recommendation Service! See docs at /apidocs.",
             docs="/apidocs",
+            list_url="/recommendations"
         ),
         status.HTTP_200_OK,
     )
