@@ -159,13 +159,15 @@ class TestYourResourceService(TestCase):
         #     test_recommendation.recommended_product_description,
         # )
 
-    # Todo: Add your test cases here...
-    # Todo: Add your test cases here...
-    def test_get_recommendation_list(self):
-        """It should Get a list of Recommendations"""
-        # Get 5 recommendations - quantity set to 5
-        self.get_recommendations(5)
-        response = self.client.get(BASE_URL)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.get_json()
-        self.assertEqual(len(data), 5)
+    def test_no_filters_returns_all(self):
+        """It should return all Recommendations when no filter is sent"""
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        c = RecommendationFactory()
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(BASE_URL)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert {x["recommendation_id"] for x in data} == {a.id, b.id, c.id}

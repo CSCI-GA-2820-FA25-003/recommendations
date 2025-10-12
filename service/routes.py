@@ -83,6 +83,7 @@ def create_recommendations():
 ######################################################################
 # LIST RECOMMENDATIONS
 ######################################################################
+@app.route("/recommendations", methods=["GET"])
 def list_recommendations():
     """Returns recommendations, optionally filtered by exactly one criterion (Pets style)."""
     app.logger.info("Request for recommendation list")

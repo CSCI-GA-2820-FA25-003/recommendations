@@ -217,12 +217,6 @@ class Recommendation(db.Model):
         return cls.query.all()
 
     @classmethod
-    def find(cls, by_id: int):
-        """Finds a Recommendation by its ID"""
-        logger.info("Processing lookup for id %s ...", by_id)
-        return cls.query.session.get(cls, by_id)
-
-    @classmethod
     def find_by_base_product_id(cls, base_product_id: int):
         """Returns all Recommendations with the given base product id"""
         logger.info("Processing base_product_id query for %s ...", base_product_id)
@@ -230,15 +224,15 @@ class Recommendation(db.Model):
 
     @classmethod
     def find_by_recommendation_type(cls, rec_type: str):
-        """Returns all Recommendations with the given recommendation_type (case-insensitive)"""
-        logger.info("Processing recommendation_type query for %s ...", rec_type)
-        return cls.query.filter(cls.recommendation_type.ilike(rec_type.strip().lower()))
+        """Returns all Recommendations with the given recommendation type"""
+        norm = rec_type.strip().lower()
+        return cls.query.filter(cls.recommendation_type == norm)
 
     @classmethod
     def find_by_status(cls, status: str):
-        """Returns all Recommendations with the given status (case-insensitive)"""
-        logger.info("Processing status query for %s ...", status)
-        return cls.query.filter(cls.status.ilike(status.strip().lower()))
+        """Returns all Recommendations with the given product availability status"""
+        norm = status.strip().lower()
+        return cls.query.filter(cls.status == norm)
 
     @classmethod
     def find_by_min_confidence(cls, threshold: float):
