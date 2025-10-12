@@ -180,8 +180,8 @@ class Recommendation(db.Model):
             self.status = status
 
             cs = self._to_decimal(data["confidence_score"])
-            if cs < Decimal("0") or cs > Decimal("1"):
-                raise DataValidationError("confidence_score must be in [0, 1]")
+            if cs < Decimal("-1") or cs > Decimal("1"):
+                raise DataValidationError("confidence_score must be in [-1, 1]")
             self.confidence_score = cs
 
             self.base_product_price = self._to_decimal(data.get("base_product_price"))
@@ -222,12 +222,12 @@ class Recommendation(db.Model):
         logger.info("Processing lookup for id %s ...", by_id)
         return cls.query.session.get(cls, by_id)
 
-    @classmethod
-    def find_by_base_product_id(cls, base_product_id):
-        """Returns all Recommendations with the given base product id
+    # @classmethod
+    # def find_by_base_product_id(cls, base_product_id):
+    #     """Returns all Recommendations with the given base product id
 
-        Args:
-            base_product_id (int): the base product id of the Recommendations you want to match
-        """
-        logger.info("Processing base_product_id query for %s ...", base_product_id)
-        return cls.query.filter(cls.base_product_id == base_product_id)
+    #     Args:
+    #         base_product_id (int): the base product id of the Recommendations you want to match
+    #     """
+    #     logger.info("Processing base_product_id query for %s ...", base_product_id)
+    #     return cls.query.filter(cls.base_product_id == base_product_id)
