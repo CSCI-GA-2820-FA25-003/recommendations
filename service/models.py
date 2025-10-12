@@ -217,17 +217,31 @@ class Recommendation(db.Model):
         return cls.query.all()
 
     @classmethod
-    def find(cls, by_id):
-        """Finds a Recommendation by it's ID"""
+    def find(cls, by_id: int):
+        """Finds a Recommendation by its ID"""
         logger.info("Processing lookup for id %s ...", by_id)
         return cls.query.session.get(cls, by_id)
 
     @classmethod
-    def find_by_base_product_id(cls, base_product_id):
-        """Returns all Recommendations with the given base product id
-
-        Args:
-            base_product_id (int): the base product id of the Recommendations you want to match
-        """
+    def find_by_base_product_id(cls, base_product_id: int):
+        """Returns all Recommendations with the given base product id"""
         logger.info("Processing base_product_id query for %s ...", base_product_id)
         return cls.query.filter(cls.base_product_id == base_product_id)
+
+    @classmethod
+    def find_by_recommendation_type(cls, rec_type: str):
+        """Returns all Recommendations with the given recommendation_type (case-insensitive)"""
+        logger.info("Processing recommendation_type query for %s ...", rec_type)
+        return cls.query.filter(cls.recommendation_type.ilike(rec_type.strip().lower()))
+
+    @classmethod
+    def find_by_status(cls, status: str):
+        """Returns all Recommendations with the given status (case-insensitive)"""
+        logger.info("Processing status query for %s ...", status)
+        return cls.query.filter(cls.status.ilike(status.strip().lower()))
+
+    @classmethod
+    def find_by_min_confidence(cls, threshold: float):
+        """Returns all Recommendations with confidence_score >= threshold"""
+        logger.info("Processing confidence_score >= %s query ...", threshold)
+        return cls.query.filter(cls.confidence_score >= threshold)

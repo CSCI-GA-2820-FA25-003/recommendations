@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
 
-from flask import jsonify, request
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
 from service.models import Recommendation
 from service.common import status  # HTTP Status Codes
@@ -81,6 +81,57 @@ def create_recommendations():
 
 
 ######################################################################
+# LIST RECOMMENDATIONS
+######################################################################
+def list_recommendations():
+    """Returns recommendations, optionally filtered by exactly one criterion (Pets style)."""
+    app.logger.info("Request for recommendation list")
+
+    # Parse args
+    base_product_id = request.args.get("base_product_id", type=int)
+    recommendation_type = request.args.get("recommendation_type", type=str)
+    confidence_score = request.args.get("confidence_score", type=float)
+    rec_status = request.args.get("status", type=str)
+    description = request.args.get("description", type=str)
+
+    # Decide which single filter to apply (elif chain), else return all
+    if base_product_id is not None:
+        app.logger.info("Find by base_product_id: %s", base_product_id)
+        recs = Recommendation.find_by_base_product_id(base_product_id)
+
+    elif recommendation_type:
+        norm_rt = recommendation_type.strip().lower()
+        app.logger.info("Find by recommendation_type: %s", norm_rt)
+        recs = Recommendation.find_by_recommendation_type(norm_rt)
+
+    elif rec_status:
+        norm_status = rec_status.strip().lower()
+        app.logger.info("Find by status: %s", norm_status)
+        recs = Recommendation.find_by_status(norm_status)
+
+    elif confidence_score is not None:
+        if confidence_score < 0 or confidence_score > 1:
+            return (
+                jsonify({"message": "confidence_score must be in [0, 1]"}),
+                status.HTTP_400_BAD_REQUEST,
+            )
+        app.logger.info("Find by min confidence_score: %s", confidence_score)
+        recs = Recommendation.find_by_min_confidence(confidence_score)
+
+    elif description:
+        app.logger.info("Find by description contains: %s", description)
+        recs = Recommendation.find_by_description(description)
+
+    else:
+        app.logger.info("Find all")
+        recs = Recommendation.all()
+
+    results = [r.serialize() for r in recs]
+    app.logger.info("Returning %d recommendations", len(results))
+    return jsonify(results), status.HTTP_200_OK
+
+
+######################################################################
 #  U T I L I T Y   F U N C T I O N S
 ######################################################################
 
@@ -105,53 +156,3 @@ def check_content_type(content_type) -> None:
         status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         f"Content-Type must be {content_type}",
     )
-
-
-@app.route("/recommendations", methods=["GET"])
-def list_recommendations():
-    """Return recommendation list with optional filters."""
-    app.logger.info("Request for recommendation list")
-
-    # ---- Query params ----
-    base_product_id = request.args.get("base_product_id", type=int)
-    recommendation_type = request.args.get("recommendation_type", type=str)
-    confidence_score = request.args.get("confidence_score", type=float)
-    rec_status = request.args.get("status", type=str)
-    limit = request.args.get("quantity", default=10, type=int)  # default = 10
-
-    # Normalize simple enums (case-insensitive; keep hyphens)
-    if recommendation_type:
-        recommendation_type = recommendation_type.strip().lower()
-    if rec_status:
-        rec_status = rec_status.strip().lower()
-
-    # ---- Build query (AND all provided filters) ----
-    query = Recommendation.query
-    if base_product_id is not None:
-        app.logger.info("Filter base_product_id=%s", base_product_id)
-        query = query.filter(Recommendation.base_product_id == base_product_id)
-    if recommendation_type:
-        app.logger.info("Filter recommendation_type=%s", recommendation_type)
-        query = query.filter(
-            Recommendation.recommendation_type.ilike(recommendation_type)
-        )
-    if confidence_score is not None:
-        app.logger.info("Filter confidence_score>=%s", confidence_score)
-        query = query.filter(Recommendation.confidence_score >= confidence_score)
-    if rec_status:
-        app.logger.info("Filter status=%s", rec_status)
-        query = query.filter(Recommendation.status.ilike(rec_status))
-
-    # ---- Execute ----
-    recs = query.limit(max(1, limit)).all()
-
-    if not recs:
-        app.logger.info("No recommendations found")
-        return (
-            jsonify({"message": "Recommendation not found"}),
-            status.HTTP_404_NOT_FOUND,
-        )
-
-    results = [r.serialize() for r in recs]
-    app.logger.info("Returning %d recommendations", len(results))
-    return jsonify(results), status.HTTP_200_OK
