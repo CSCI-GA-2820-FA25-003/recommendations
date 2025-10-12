@@ -21,14 +21,17 @@ TestRecommendation API Service Test Suite
 # pylint: disable=duplicate-code
 import os
 import logging
+from decimal import Decimal
 from unittest import TestCase
 from wsgi import app
 from service.common import status
 from service.models import db, Recommendation
+from .factories import RecommendationFactory
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
+BASE_URL = "/recommendations"
 BASE_URL = "/recommendations"
 
 
@@ -72,6 +75,89 @@ class TestYourResourceService(TestCase):
         """It should call the home page"""
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_create_recommendation(self):
+        """It should Create a new Recommendation"""
+        test_recommendation = RecommendationFactory()
+        logging.debug("Test Recommendation: %s", test_recommendation.serialize())
+        response = self.client.post(BASE_URL, json=test_recommendation.serialize())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Make sure location header is set
+        location = response.headers.get("Location", None)
+        self.assertIsNotNone(location)
+
+        # Check the data is correct
+        new_recommendation = response.get_json()
+        self.assertEqual(
+            new_recommendation["base_product_id"], test_recommendation.base_product_id
+        )
+        self.assertEqual(
+            new_recommendation["recommended_product_id"],
+            test_recommendation.recommended_product_id,
+        )
+        self.assertEqual(
+            new_recommendation["recommendation_type"],
+            test_recommendation.recommendation_type,
+        )
+        self.assertEqual(new_recommendation["status"], test_recommendation.status)
+        self.assertEqual(
+            Decimal(str(new_recommendation["confidence_score"])),
+            test_recommendation.confidence_score,
+        )
+        self.assertEqual(
+            Decimal(str(new_recommendation["base_product_price"])),
+            test_recommendation.base_product_price,
+        )
+        self.assertEqual(
+            Decimal(str(new_recommendation["recommended_product_price"])),
+            test_recommendation.recommended_product_price,
+        )
+        self.assertEqual(
+            new_recommendation["base_product_description"],
+            test_recommendation.base_product_description,
+        )
+        self.assertEqual(
+            new_recommendation["recommended_product_description"],
+            test_recommendation.recommended_product_description,
+        )
+
+        # Todo: Uncomment this code when get_recommendations in implemented
+        # # Check that the location header was correct
+        # response = self.client.get(location)
+        # self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # new_recommendation = response.get_json()
+        # self.assertEqual(
+        #     new_recommendation["base_product_id"], test_recommendation.base_product_id
+        # )
+        # self.assertEqual(
+        #     new_recommendation["recommended_product_id"],
+        #     test_recommendation.recommended_product_id,
+        # )
+        # self.assertEqual(
+        #     new_recommendation["recommendation_type"],
+        #     test_recommendation.recommendation_type,
+        # )
+        # self.assertEqual(new_recommendation["status"], test_recommendation.status)
+        # self.assertEqual(
+        #     new_recommendation["confidence_score"], test_recommendation.confidence_score
+        # )
+        # self.assertEqual(
+        #     new_recommendation["base_product_price"],
+        #     test_recommendation.base_product_price,
+        # )
+        # self.assertEqual(
+        #     new_recommendation["recommended_product_price"],
+        #     test_recommendation.recommended_product_price,
+        # )
+        # self.assertEqual(
+        #     new_recommendation["base_product_description"],
+        #     test_recommendation.base_product_description,
+        # )
+        # self.assertEqual(
+        #     new_recommendation["recommended_product_description"],
+        #     test_recommendation.recommended_product_description,
+        # )
 
     # Todo: Add your test cases here...
     # Todo: Add your test cases here...
