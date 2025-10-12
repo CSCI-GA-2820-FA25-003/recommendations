@@ -19,11 +19,12 @@ Test cases for Pet Model
 """
 
 # pylint: disable=duplicate-code
+from decimal import Decimal
 import os
 import logging
 from unittest import TestCase
 from wsgi import app
-from service.models import Recommendation, DataValidationError, db
+from service.models import DataValidationError, Recommendation, db
 from .factories import RecommendationFactory
 
 DATABASE_URI = os.getenv(
@@ -98,3 +99,30 @@ class TestRecommendation(TestCase):
         self.assertEqual(data.updated_date, recommendation.updated_date)
 
     # Todo: Add your test cases here...
+    def test_update_type_normalizes_and_persists(self):
+        """It should update a Recommendation's type and normalize it to lowercase"""
+        rec = RecommendationFactory(recommendation_type="cross-sell")
+        rec.create()
+        rec.update({"recommendation_type": "UP-SELL"})
+        assert Recommendation.find(rec.id).recommendation_type == "up-sell"
+
+    def test_update_status_normalizes_and_persists(self):
+        """It should update a Recommendation's status and normalize it to lowercase"""
+        rec = RecommendationFactory(status="inactive")
+        rec.create()
+        rec.update({"status": "ACTIVE"})
+        assert Recommendation.find(rec.id).status == "active"
+
+    def test_update_confidence_valid_and_bounds(self):
+        """It should update a Recommendation's confidence_score and ensure it's valid and within bounds [0, 1]"""
+        rec = RecommendationFactory(confidence_score="0.4")
+        rec.create()
+        rec.update({"confidence_score": 0.9})
+        assert Recommendation.find(rec.id).confidence_score == Decimal("0.90")
+
+    def test_update_confidence_out_of_range_raises(self):
+        """It should raise DataValidationError when updating confidence_score out of range [0, 1]"""
+        rec = RecommendationFactory(confidence_score="0.5")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"confidence_score": 1.2})
