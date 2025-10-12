@@ -96,5 +96,3 @@ class TestRecommendation(TestCase):
         )
         self.assertEqual(data.created_date, recommendation.created_date)
         self.assertEqual(data.updated_date, recommendation.updated_date)
-
-    # Todo: Add your test cases here...

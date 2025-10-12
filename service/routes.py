@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request
 from flask import current_app as app  # Import Flask application
 from service.models import Recommendation
 from service.common import status  # HTTP Status Codes
@@ -43,4 +43,52 @@ def index():
 #  R E S T   A P I   E N D P O I N T S
 ######################################################################
 
-# Todo: Place your REST API code here ...
+
+@app.route("/recommendations", methods=["GET"])
+def list_recommendations():
+    """Return recommendation list with optional filters."""
+    app.logger.info("Request for recommendation list")
+
+    # ---- Query params ----
+    base_product_id = request.args.get("base_product_id", type=int)
+    recommendation_type = request.args.get("recommendation_type", type=str)
+    confidence_score = request.args.get("confidence_score", type=float)
+    rec_status = request.args.get("status", type=str)
+    limit = request.args.get("quantity", default=10, type=int)  # default = 10
+
+    # Normalize simple enums (case-insensitive; keep hyphens)
+    if recommendation_type:
+        recommendation_type = recommendation_type.strip().lower()
+    if rec_status:
+        rec_status = rec_status.strip().lower()
+
+    # ---- Build query (AND all provided filters) ----
+    query = Recommendation.query
+    if base_product_id is not None:
+        app.logger.info("Filter base_product_id=%s", base_product_id)
+        query = query.filter(Recommendation.base_product_id == base_product_id)
+    if recommendation_type:
+        app.logger.info("Filter recommendation_type=%s", recommendation_type)
+        query = query.filter(
+            Recommendation.recommendation_type.ilike(recommendation_type)
+        )
+    if confidence_score is not None:
+        app.logger.info("Filter confidence_score>=%s", confidence_score)
+        query = query.filter(Recommendation.confidence_score >= confidence_score)
+    if rec_status:
+        app.logger.info("Filter status=%s", rec_status)
+        query = query.filter(Recommendation.status.ilike(rec_status))
+
+    # ---- Execute ----
+    recs = query.limit(max(1, limit)).all()
+
+    if not recs:
+        app.logger.info("No recommendations found")
+        return (
+            jsonify({"message": "Recommendation not found"}),
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    results = [r.serialize() for r in recs]
+    app.logger.info("Returning %d recommendations", len(results))
+    return jsonify(results), status.HTTP_200_OK

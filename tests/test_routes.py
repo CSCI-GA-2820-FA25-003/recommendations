@@ -29,6 +29,7 @@ from service.models import db, Recommendation
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
+BASE_URL = "/recommendations"
 
 
 ######################################################################
@@ -73,3 +74,12 @@ class TestYourResourceService(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Todo: Add your test cases here...
+    # Todo: Add your test cases here...
+    def test_get_recommendation_list(self):
+        """It should Get a list of Recommendations"""
+        # Get 5 recommendations - quantity set to 5
+        self.get_recommendations(5)
+        response = self.client.get(BASE_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 5)
