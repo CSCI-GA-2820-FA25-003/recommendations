@@ -81,7 +81,7 @@ def create_recommendations():
 
 
 ######################################################################
-# READ A PET
+# READ A Recommendation
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
 def get_recommendations(recommendation_id):
