@@ -93,7 +93,6 @@ def list_recommendations():
     recommendation_type = request.args.get("recommendation_type", type=str)
     confidence_score = request.args.get("confidence_score", type=float)
     rec_status = request.args.get("status", type=str)
-    description = request.args.get("description", type=str)
 
     # Decide which single filter to apply (elif chain), else return all
     if base_product_id is not None:
@@ -118,11 +117,6 @@ def list_recommendations():
             )
         app.logger.info("Find by min confidence_score: %s", confidence_score)
         recs = Recommendation.find_by_min_confidence(confidence_score)
-
-    elif description:
-        app.logger.info("Find by description contains: %s", description)
-        recs = Recommendation.find_by_description(description)
-
     else:
         app.logger.info("Find all")
         recs = Recommendation.all()
