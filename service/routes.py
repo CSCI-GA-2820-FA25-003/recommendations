@@ -94,12 +94,12 @@ def get_recommendations(recommendation_id):
         "Request to Retrieve a Recommendation with id [%s]", recommendation_id
     )
 
-    # Attempt to find the Pet and abort if not found
+    # Attempt to find the Recommendation and abort if not found
     recommendation = Recommendation.find(recommendation_id)
     if not recommendation:
         abort(
             status.HTTP_404_NOT_FOUND,
-            f"Pet with id '{recommendation_id}' was not found.",
+            f"Recommendation with id '{recommendation_id}' was not found.",
         )
 
     app.logger.info("Returning recommendation: %s", recommendation.id)
