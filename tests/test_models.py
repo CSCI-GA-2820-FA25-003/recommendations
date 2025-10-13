@@ -15,7 +15,7 @@
 ######################################################################
 
 """
-Test cases for Pet Model
+Test cases for Recommendation Model
 """
 
 # pylint: disable=duplicate-code
@@ -96,5 +96,14 @@ class TestRecommendation(TestCase):
         )
         self.assertEqual(data.created_date, recommendation.created_date)
         self.assertEqual(data.updated_date, recommendation.updated_date)
+
+    def test_delete_a_recommendation(self):
+        """It should Delete a Recommendation"""
+        recommendation = RecommendationFactory()
+        recommendation.create()
+        self.assertEqual(len(Recommendation.all()), 1)
+        # delete the recommendation and make sure it isn't in the database
+        recommendation.delete()
+        self.assertEqual(len(Recommendation.all()), 0)
 
     # Todo: Add your test cases here...
