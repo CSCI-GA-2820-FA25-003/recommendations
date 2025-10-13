@@ -180,8 +180,8 @@ class Recommendation(db.Model):
             self.status = status
 
             cs = self._to_decimal(data["confidence_score"])
-            if cs < Decimal("-1") or cs > Decimal("1"):
-                raise DataValidationError("confidence_score must be in [-1, 1]")
+            if cs < Decimal("0") or cs > Decimal("1"):
+                raise DataValidationError("confidence_score must be in [0, 1]")
             self.confidence_score = cs
 
             self.base_product_price = self._to_decimal(data.get("base_product_price"))
