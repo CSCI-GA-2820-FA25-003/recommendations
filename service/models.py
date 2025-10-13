@@ -136,7 +136,7 @@ class Recommendation(db.Model):
     def serialize(self):
         """Serializes a Recommendation into a dictionary"""
         return {
-            "id": self.id,
+            "recommendation_id": self.id,
             "base_product_id": self.base_product_id,
             "recommended_product_id": self.recommended_product_id,
             "recommendation_type": (
