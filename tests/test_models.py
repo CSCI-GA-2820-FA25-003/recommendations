@@ -126,3 +126,52 @@ class TestRecommendation(TestCase):
         rec.create()
         with self.assertRaises(DataValidationError):
             rec.update({"confidence_score": 1.2})
+
+    def test_update_fails_for_invalid_status(self):
+        """It should raise DataValidationError when updating status to an invalid value"""
+        rec = RecommendationFactory(status="active")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"status": "unknown"})
+
+    def test_update_fails_for_invalid_recommendation_type(self):
+        """It should raise DataValidationError when updating recommendation_type to an invalid value"""
+        rec = RecommendationFactory(recommendation_type="up-sell")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"recommendation_type": "invalid-type"})
+
+    def test_update_raises_when_called_without_id(self):
+        """Model: update() should raise if the instance has no id (not persisted)."""
+        # Build a transient (unsaved) instance with no id
+        rec = Recommendation(
+            base_product_id=1,
+            recommended_product_id=2,
+            recommendation_type="cross-sell",
+            status="active",
+            confidence_score=Decimal("0.50"),
+        )
+        with self.assertRaises(DataValidationError) as ctx:
+            rec.update({})
+        self.assertIn("empty ID", str(ctx.exception))
+
+    def test_update_fails_with_invalid_recommendation_type(self):
+        """It should raise DataValidationError when updating recommendation_type to an empty value"""
+        rec = RecommendationFactory(recommendation_type="up-sell")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"recommendation_type": ""})
+
+    def test_update_fails_with_invalid_status(self):
+        """It should raise DataValidationError when updating status to an empty value"""
+        rec = RecommendationFactory(status="active")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"status": ""})
+
+    def test_update_fails_with_invalid_confidence_score(self):
+        """It should raise DataValidationError when updating confidence_score to a non-numeric value"""
+        rec = RecommendationFactory(confidence_score="0.5")
+        rec.create()
+        with self.assertRaises(DataValidationError):
+            rec.update({"confidence_score": "not-a-number"})

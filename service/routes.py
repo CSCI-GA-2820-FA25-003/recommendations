@@ -110,6 +110,12 @@ def update_recommendation(recommendation_id: int):
         )
 
     data = request.get_json() or {}
+    if not data:  # {} or None after get_json
+        return (
+            jsonify({"message": "At least one field is required"}),
+            status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         rec.update(data)  # model handles normalization + validation
     except DataValidationError as e:
