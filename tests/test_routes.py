@@ -82,7 +82,7 @@ class TestYourResourceService(TestCase):
                 "Could not create test recommendation",
             )
             new_recommendation = response.get_json()
-            test_recommendation.id = new_recommendation["id"]
+            test_recommendation.id = new_recommendation["recommendation_id"]
             recommendations.append(test_recommendation)
         return recommendations
 
