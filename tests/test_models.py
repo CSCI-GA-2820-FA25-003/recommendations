@@ -105,5 +105,49 @@ class TestRecommendation(TestCase):
         # delete the recommendation and make sure it isn't in the database
         recommendation.delete()
         self.assertEqual(len(Recommendation.all()), 0)
+    # ----------------------------------------------------------
+    # TEST READ
+    # ----------------------------------------------------------
+
+    def test_read_a_recommendation(self):
+        """It should Read a Recommendation"""
+        recommendation = RecommendationFactory()
+        logging.debug(recommendation)
+        recommendation.id = None
+        recommendation.create()
+        self.assertIsNotNone(recommendation.id)
+        found_recommendation = Recommendation.find(recommendation.id)
+        self.assertEqual(found_recommendation.id, recommendation.id)
+        self.assertEqual(
+            found_recommendation.base_product_id, recommendation.base_product_id
+        )
+        self.assertEqual(
+            found_recommendation.recommended_product_id,
+            recommendation.recommended_product_id,
+        )
+        self.assertEqual(
+            found_recommendation.recommendation_type, recommendation.recommendation_type
+        )
+        self.assertEqual(found_recommendation.status, recommendation.status)
+        self.assertEqual(
+            found_recommendation.confidence_score, recommendation.confidence_score
+        )
+        self.assertEqual(
+            found_recommendation.base_product_price, recommendation.base_product_price
+        )
+        self.assertEqual(
+            found_recommendation.recommended_product_price,
+            recommendation.recommended_product_price,
+        )
+        self.assertEqual(
+            found_recommendation.base_product_description,
+            recommendation.base_product_description,
+        )
+        self.assertEqual(
+            found_recommendation.recommended_product_description,
+            recommendation.recommended_product_description,
+        )
+        self.assertEqual(found_recommendation.created_date, recommendation.created_date)
+        self.assertEqual(found_recommendation.updated_date, recommendation.updated_date)
 
     # Todo: Add your test cases here...

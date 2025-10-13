@@ -15,7 +15,7 @@
 ######################################################################
 
 """
-TestRecommendation API Service Test Suite
+Test Recommendation API Service Test Suite
 """
 
 # pylint: disable=duplicate-code
@@ -75,7 +75,6 @@ class TestYourResourceService(TestCase):
         for _ in range(count):
             test_recommendation = RecommendationFactory()
             response = self.client.post(BASE_URL, json=test_recommendation.serialize())
-            print("POST /recommendations ->", response.status_code, response.get_json())
             self.assertEqual(
                 response.status_code,
                 status.HTTP_201_CREATED,
@@ -140,6 +139,43 @@ class TestYourResourceService(TestCase):
             new_recommendation["recommended_product_description"],
             test_recommendation.recommended_product_description,
         )
+
+    # ----------------------------------------------------------
+    # TEST READ
+    # ----------------------------------------------------------
+    def test_get_recommendation(self):
+        """It should Get a single Recommendation"""
+        # get the id of a recommendation
+        test_recommendation = self._create_recommendations(1)[0]
+        recommendation_id = test_recommendation["recommendation_id"]
+        response = self.client.get(f"{BASE_URL}/{recommendation_id}")
+        data = response.get_json()
+
+        self.assertEqual(
+            data["recommendation_id"], test_recommendation["recommendation_id"]
+        )
+        self.assertEqual(
+            data["base_product_id"], test_recommendation["base_product_id"]
+        )
+        self.assertEqual(
+            data["recommended_product_id"],
+            test_recommendation["recommended_product_id"],
+        )
+        self.assertEqual(
+            data["recommendation_type"], test_recommendation["recommendation_type"]
+        )
+        self.assertEqual(data["status"], test_recommendation["status"])
+        self.assertAlmostEqual(
+            data["confidence_score"], float(test_recommendation["confidence_score"])
+        )
+
+    def test_get_recommendation_not_found(self):
+        """It should not Get a Recommendation thats not found"""
+        response = self.client.get(f"{BASE_URL}/0")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.get_json()
+        logging.debug("Response data = %s", data)
+        self.assertIn("was not found", data["message"])
 
         # Todo: Uncomment this code when get_recommendations in implemented
         # # Check that the location header was correct
