@@ -23,7 +23,7 @@ and Delete Recommendation
 
 from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
-from service.models import Recommendation
+from service.models import DataValidationError, Recommendation
 from service.common import status  # HTTP Status Codes
 
 
@@ -33,8 +33,15 @@ from service.common import status  # HTTP Status Codes
 @app.route("/")
 def index():
     """Root URL response"""
+    app.logger.info("Request for Root URL")
     return (
-        "Reminder: return some useful information in json format about the service here",
+        jsonify(
+            name="Recommendation REST API Service",
+            version="1.0",
+            message="Welcome to the Recommendation Service! See docs at /apidocs.",
+            docs="/apidocs",
+            list_url="/recommendations",
+        ),
         status.HTTP_200_OK,
     )
 
@@ -78,6 +85,100 @@ def create_recommendations():
         status.HTTP_201_CREATED,
         {"Location": location_url},
     )
+
+
+#####################################################################
+# UPDATE AN EXISTING RECOMMENDATION
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["PUT"])
+def update_recommendation(recommendation_id: int):
+    """
+    Update an existing recommendation's editable fields.
+
+    Endpoint:
+        PUT /recommendations/<recommendation_id>
+
+    Request Body (application/json):
+        {
+          "recommendation_type": "up-sell" | "cross-sell" | "accessory",   # optional
+          "confidence_score": 0.0..1.0,                                   # optional
+            "status": "active" | "inactive",                                 # optional
+        }
+        At least one of the above fields must be provided.
+        Values are normalized/validated in the model; confidence_score must be in [0, 1].
+    """
+    app.logger.info("Request to Update recommendation with id: %s", recommendation_id)
+    check_content_type("application/json")
+    rec = Recommendation.find(recommendation_id)
+    if rec is None:
+        return (
+            jsonify({"message": "Recommendation not found"}),
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    data = request.get_json() or {}
+    if not data:  # {} or None after get_json
+        return (
+            jsonify({"message": "At least one field is required"}),
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        rec.update(data)  # model handles normalization + validation
+    except DataValidationError as e:
+        return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
+
+    return jsonify(rec.serialize()), status.HTTP_200_OK
+
+
+#####################################################################
+# DELETE A RECOMMENDATION
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
+def delete_recommendations(recommendation_id):
+    """
+    Delete a Recommendation
+
+    This endpoint will delete a Recommendation based the id specified in the path
+    """
+    app.logger.info(
+        "Request to Delete a recommendation with id [%s]", recommendation_id
+    )
+
+    # Delete the Recommendation if it exists
+    recommendation = Recommendation.find(recommendation_id)
+    if recommendation:
+        app.logger.info("Recommendation with ID: %d found.", recommendation.id)
+        recommendation.delete()
+
+    app.logger.info("Recommendation with ID: %d delete complete.", recommendation_id)
+    return {}, status.HTTP_204_NO_CONTENT
+
+
+#####################################################################
+# READ A Recommendation
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
+def get_recommendations(recommendation_id):
+    """
+    Retrieve a single Recommendation
+
+    This endpoint will return a Recommendation based on it's id
+    """
+    app.logger.info(
+        "Request to Retrieve a Recommendation with id [%s]", recommendation_id
+    )
+
+    # Attempt to find the Recommendation and abort if not found
+    recommendation = Recommendation.find(recommendation_id)
+    if not recommendation:
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            f"Recommendation with id '{recommendation_id}' was not found.",
+        )
+
+    app.logger.info("Returning recommendation: %s", recommendation.id)
+    return jsonify(recommendation.serialize()), status.HTTP_200_OK
 
 
 ######################################################################
