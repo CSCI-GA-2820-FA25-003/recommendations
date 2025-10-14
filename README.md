@@ -1,69 +1,237 @@
-# NYU DevOps Project Template
+
+# Recommendations Microservice
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Language-Python-blue.svg)](https://python.org/)
 
-This is a skeleton you can use to start your projects.
+This repository implements a **Recommendations Microservice** built with Flask and SQLAlchemy.  
+It follows the NYU DevOps microservice architecture template and supports RESTful endpoints for managing product recommendations.
 
-**Note:** _Feel free to overwrite this `README.md` file with the one that describes your project._
+---
 
 ## Overview
 
-This project template contains starter code for your class project. The `/service` folder contains your `models.py` file for your model and a `routes.py` file for your service. The `/tests` folder has test case starter code for testing the model and the service separately. All you need to do is add your functionality. You can use the [lab-flask-tdd](https://github.com/nyu-devops/lab-flask-tdd) for code examples to copy from.
+This project provides a backend service for managing product-to-product recommendations, such as **cross-sell**, **up-sell**, or **accessory** suggestions.  
+It includes a data model, Flask API routes, test cases, and Docker/Makefile workflows for development and deployment.
+
+### Quickstart (Local Setup)
+
+```bash
+# Clone repository
+git clone https://github.com/CSCI-GA-2820-FA25-003/recommendations
+cd recommendations
+
+# Use Python 3.11 with Pipenv
+pip install pipenv
+pipenv install --dev
+pipenv shell
+
+# Copy environment variables
+cp dot-env-example .env
+
+# Run service
+make run
+# or
+flask run -h 0.0.0.0 -p 8080
+```
+
+The service will be available at:  
+👉 **http://127.0.0.1:8080**
+
+---
 
 ## Automatic Setup
 
-The best way to use this repo is to start your own repo using it as a git template. To do this just press the green **Use this template** button in GitHub and this will become the source for your repository.
+The repository can be initialized as a GitHub template by pressing the green **“Use this template”** button.  
+This allows your team to create a new repository based on this scaffold.
+
+---
 
 ## Manual Setup
 
-You can also clone this repository and then copy and paste the starter code into your project repo folder on your local computer. Be careful not to copy over your own `README.md` file so be selective in what you copy.
-
-There are 4 hidden files that you will need to copy manually if you use the Mac Finder or Windows Explorer to copy files from this folder into your repo folder.
-
-These should be copied using a bash shell as follows:
+You can also manually copy starter code into an existing project.  
+If you do this, ensure you also copy hidden files that some GUI file managers may skip:
 
 ```bash
-    cp .gitignore  ../<your_repo_folder>/
-    cp .flaskenv ../<your_repo_folder>/
-    cp .gitattributes ../<your_repo_folder>/
+cp .gitignore      ../<your_repo_folder>/
+cp .gitattributes  ../<your_repo_folder>/
 ```
+
+For configuration, copy the provided `dot-env-example` and update as needed:
+
+```
+FLASK_APP=wsgi:app
+PORT=8080
+DATABASE_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+SECRET_KEY=
+LOG_LEVEL=INFO
+```
+
+---
 
 ## Contents
 
-The project contains the following:
-
 ```text
-.gitignore          - this will ignore vagrant and other metadata files
-.flaskenv           - Environment variables to configure Flask
-.gitattributes      - File to gix Windows CRLF issues
-.devcontainers/     - Folder with support for VSCode Remote Containers
-dot-env-example     - copy to .env to use environment variables
-pyproject.toml      - Poetry list of Python libraries required by your code
+.gitignore          - ignores unnecessary files
+.gitattributes      - handles CRLF line endings
+dot-env-example     - environment variables sample
+Pipfile             - Pipenv dependency manager (Python 3.11)
+Procfile            - Gunicorn entry for deployment
+Makefile            - developer tasks (install/lint/test/run/deploy)
+setup.cfg           - lint/test configuration
+wsgi.py             - WSGI entry point (create_app())
 
-service/                   - service python package
-├── __init__.py            - package initializer
-├── config.py              - configuration parameters
-├── models.py              - module with business models
-├── routes.py              - module with service routes
-└── common                 - common code package
-    ├── cli_commands.py    - Flask command to recreate all tables
-    ├── error_handlers.py  - HTTP error handling code
-    ├── log_handlers.py    - logging setup code
-    └── status.py          - HTTP status constants
+service/                   - main application package
+├── __init__.py            - Flask app factory
+├── config.py              - configuration settings
+├── models.py              - SQLAlchemy model (Recommendation)
+├── routes.py              - REST API routes
+└── common/                - helper modules (CLI, logging, errors, status codes)
 
-tests/                     - test cases package
-├── __init__.py            - package initializer
-├── factories.py           - Factory for testing with fake objects
-├── test_cli_commands.py   - test suite for the CLI
-├── test_models.py         - test suite for business models
-└── test_routes.py         - test suite for service routes
+tests/                     - pytest suite
+├── factories.py           - data factories
+├── test_cli_commands.py   - CLI tests
+├── test_models.py         - model tests
+└── test_routes.py         - route tests
 ```
+
+---
+
+## Makefile Commands
+
+Common developer commands:
+
+```bash
+make install     # install dependencies
+make lint        # check code style
+make format      # auto-format with black/isort
+make test        # run all tests
+make coverage    # run tests with coverage
+make run         # run Flask locally (wsgi:app)
+make build/push  # container image build & push
+make deploy      # deploy to local Kubernetes cluster
+```
+
+> Run `make help` to view all available targets.
+
+---
+
+## API Overview
+
+### Root Endpoint
+```
+GET /
+→ 200 OK
+```
+Returns a simple landing page text.
+
+### Create a Recommendation
+```
+POST /recommendations
+Content-Type: application/json
+
+{
+  "base_product_id": 1001,
+  "recommended_product_id": 2001,
+  "recommendation_type": "cross-sell",
+  "status": "active",
+  "confidence_score": 0.85,
+  "base_product_price": 19.99,
+  "recommended_product_price": 9.99,
+  "base_product_description": "Base product",
+  "recommended_product_description": "Accessory"
+}
+
+→ 201 Created
+Location: /recommendations/<id>
+```
+
+### Retrieve a Recommendation
+```
+GET /recommendations/<id>
+→ 200 OK | 404 Not Found
+```
+
+---
+
+## Data Model
+
+The `Recommendation` model is defined in `service/models.py` using SQLAlchemy.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | Integer | Primary key |
+| base_product_id | Integer | ID of the base product |
+| recommended_product_id | Integer | ID of the recommended product |
+| recommendation_type | Enum | `"cross-sell"`, `"up-sell"`, `"accessory"` |
+| status | Enum | `"active"` or `"inactive"` |
+| confidence_score | Numeric(3,2) | Confidence value (e.g., 0.85) |
+| base_product_price | Numeric(14,2) | Optional |
+| recommended_product_price | Numeric(14,2) | Optional |
+| base_product_description | String(1023) | Optional |
+| recommended_product_description | String(1023) | Optional |
+| created_date | DateTime | Auto timestamp |
+| updated_date | DateTime | Auto timestamp |
+
+---
+
+## Database
+
+Configured for **PostgreSQL** by default:
+
+```
+postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+```
+
+Tables are created automatically on app startup with `db.create_all()`.
+
+---
+
+## Testing
+
+Run unit tests with:
+
+```bash
+make test
+# or
+pytest -q
+```
+
+Generate a coverage report:
+
+```bash
+make coverage
+```
+
+Tests are located in the `/tests` directory.
+
+---
+
+## Deployment
+
+Production uses **Gunicorn** via the `Procfile`:
+
+```
+web: gunicorn --bind 0.0.0.0:$PORT wsgi:app
+```
+
+Docker and Kubernetes helpers are available through the Makefile (`make build`, `make cluster`, `make deploy`).
+
+---
+
+## Roadmap
+
+- [ ] Implement `GET /recommendations` (list all or filter by status/type)
+- [ ] Add `PUT` and `DELETE` endpoints
+- [ ] Add `Location` header in POST response dynamically
+- [ ] Improve factory seeding for integration testing
+- [ ] CI pipeline with GitHub Actions
+
+---
 
 ## License
 
-Copyright (c) 2016, 2025 [John Rofrano](https://www.linkedin.com/in/JohnRofrano/). All rights reserved.
+Licensed under the **Apache License 2.0**.  
+See [LICENSE](LICENSE) for details.
 
-Licensed under the Apache License. See [LICENSE](LICENSE)
-
-This repository is part of the New York University (NYU) masters class: **CSCI-GA.2820-001 DevOps and Agile Methodologies** created and taught by [John Rofrano](https://cs.nyu.edu/~rofrano/), Adjunct Instructor, NYU Courant Institute, Graduate Division, Computer Science, and NYU Stern School of Business.
+This repository is part of the **NYU CSCI-GA.2820 DevOps and Agile Methodologies** course.
