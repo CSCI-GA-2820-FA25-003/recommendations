@@ -33,8 +33,15 @@ from service.common import status  # HTTP Status Codes
 @app.route("/")
 def index():
     """Root URL response"""
+    app.logger.info("Request for Root URL")
     return (
-        "Reminder: return some useful information in json format about the service here",
+        jsonify(
+            name="Recommendation REST API Service",
+            version="1.0",
+            message="Welcome to the Recommendation Service! See docs at /apidocs.",
+            docs="/apidocs",
+            list_url="/recommendations"
+        ),
         status.HTTP_200_OK,
     )
 
@@ -122,6 +129,50 @@ def update_recommendation(recommendation_id: int):
         return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
 
     return jsonify(rec.serialize()), status.HTTP_200_OK
+# DELETE A RECOMMENDATION
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
+def delete_recommendations(recommendation_id):
+    """
+    Delete a Recommendation
+
+    This endpoint will delete a Recommendation based the id specified in the path
+    """
+    app.logger.info(
+        "Request to Delete a recommendation with id [%s]", recommendation_id
+    )
+
+    # Delete the Recommendation if it exists
+    recommendation = Recommendation.find(recommendation_id)
+    if recommendation:
+        app.logger.info("Recommendation with ID: %d found.", recommendation.id)
+        recommendation.delete()
+
+    app.logger.info("Recommendation with ID: %d delete complete.", recommendation_id)
+    return {}, status.HTTP_204_NO_CONTENT
+# READ A Recommendation
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
+def get_recommendations(recommendation_id):
+    """
+    Retrieve a single Recommendation
+
+    This endpoint will return a Recommendation based on it's id
+    """
+    app.logger.info(
+        "Request to Retrieve a Recommendation with id [%s]", recommendation_id
+    )
+
+    # Attempt to find the Recommendation and abort if not found
+    recommendation = Recommendation.find(recommendation_id)
+    if not recommendation:
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            f"Recommendation with id '{recommendation_id}' was not found.",
+        )
+
+    app.logger.info("Returning recommendation: %s", recommendation.id)
+    return jsonify(recommendation.serialize()), status.HTTP_200_OK
 
 
 ######################################################################
