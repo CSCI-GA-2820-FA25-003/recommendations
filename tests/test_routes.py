@@ -268,6 +268,7 @@ class TestYourResourceService(TestCase):
         resp = self.client.put(f"{BASE_URL}/{rec.id}", json={})
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert "at least one" in resp.get_json().get("message", "").lower()
+
     # ----------------------------------------------------------
     # TEST DELETE
     # ----------------------------------------------------------
@@ -286,3 +287,111 @@ class TestYourResourceService(TestCase):
         response = self.client.delete(f"{BASE_URL}/0")
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(response.data), 0)
+
+    def test_create_recommendation_fails_for_negative_confidence_score(self):
+        """It should Create a new Recommendation"""
+        test_recommendation = RecommendationFactory(confidence_score=Decimal("-0.83"))
+        logging.debug("Test Recommendation: %s", test_recommendation.serialize())
+        response = self.client.post(BASE_URL, json=test_recommendation.serialize())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_recommendation_fails_for_wrong_recommendation_type(self):
+        """It should not Create a new Recommendation with wrong recommendation_type"""
+        test_recommendation = RecommendationFactory()
+        rec = test_recommendation.serialize()
+        rec["recommendation_type"] = "invalid-type"
+        logging.debug("Test Recommendation: %s", rec)
+        response = self.client.post(BASE_URL, json=rec)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_recommendation_fails_for_wrong_status_type(self):
+        """It should not Create a new Recommendation with wrong status"""
+        test_recommendation = RecommendationFactory()
+        rec = test_recommendation.serialize()
+        rec["status"] = "invalid-status"
+        logging.debug("Test Recommendation: %s", rec)
+        response = self.client.post(BASE_URL, json=rec)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_no_filters_returns_all(self):
+        """It should return all Recommendations when no filter is sent"""
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        c = RecommendationFactory()
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(BASE_URL)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert {x["recommendation_id"] for x in data} == {a.id, b.id, c.id}
+
+    def test_filter_by_base_product_id(self):
+        """It should filter Recommendations by base_product_id"""
+        a = RecommendationFactory(base_product_id=10)
+        b = RecommendationFactory(base_product_id=10)
+        c = RecommendationFactory(base_product_id=11)
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(f"{BASE_URL}?base_product_id=10")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {a.id, b.id}
+
+    def test_filter_by_recommendation_type_case_insensitive(self):
+        """It should filter Recommendations by recommendation_type case-insensitively"""
+        a = RecommendationFactory(recommendation_type="cross-sell")
+        b = RecommendationFactory(recommendation_type="up-sell")
+        c = RecommendationFactory(recommendation_type="accessory")
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(f"{BASE_URL}?recommendation_type=CROSS-SELL")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {a.id}
+
+    def test_filter_by_status_case_insensitive(self):
+        """It should filter Recommendations by status case-insensitively"""
+        a = RecommendationFactory(status="active")
+        b = RecommendationFactory(status="inactive")
+        c = RecommendationFactory(status="active")
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(f"{BASE_URL}?status=ACTIVE")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {a.id, c.id}
+
+    def test_filter_by_min_confidence_inclusive(self):
+        """It should filter Recommendations by minimum confidence_score inclusively"""
+        a = RecommendationFactory(confidence_score=Decimal("0.50"))
+        b = RecommendationFactory(confidence_score=Decimal("0.75"))
+        c = RecommendationFactory(confidence_score=Decimal("0.90"))
+        a.create()
+        b.create()
+        c.create()
+        resp = self.client.get(f"{BASE_URL}?confidence_score=0.75")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {b.id, c.id}
+
+    def test_confidence_score_out_of_range_returns_400(self):
+        """It should return 400 Bad Request if confidence_score is out of range [0, 1]"""
+        resp = self.client.get(f"{BASE_URL}?confidence_score=-0.1")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        resp = self.client.get(f"{BASE_URL}?confidence_score=1.1")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_empty_result_is_200_empty_list(self):
+        """It should return 200 OK with empty list if no records match"""
+        resp = self.client.get(f"{BASE_URL}?base_product_id=99999")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        assert data == []

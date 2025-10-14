@@ -106,6 +106,7 @@ class TestRecommendation(TestCase):
         # delete the recommendation and make sure it isn't in the database
         recommendation.delete()
         self.assertEqual(len(Recommendation.all()), 0)
+
     # ----------------------------------------------------------
     # TEST READ
     # ----------------------------------------------------------
@@ -151,7 +152,6 @@ class TestRecommendation(TestCase):
         self.assertEqual(found_recommendation.created_date, recommendation.created_date)
         self.assertEqual(found_recommendation.updated_date, recommendation.updated_date)
 
-    # Todo: Add your test cases here...
     def test_update_type_normalizes_and_persists(self):
         """It should update a Recommendation's type and normalize it to lowercase"""
         rec = RecommendationFactory(recommendation_type="cross-sell")
@@ -228,3 +228,102 @@ class TestRecommendation(TestCase):
         rec.create()
         with self.assertRaises(DataValidationError):
             rec.update({"confidence_score": "not-a-number"})
+
+    def test_all_returns_empty_then_populated(self):
+        """It should return [] when empty and all rows when populated"""
+        self.assertEqual(len(Recommendation.all()), 0)
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        a.create()
+        b.create()
+        rows = Recommendation.all()
+        self.assertEqual(len(rows), 2)
+        self.assertCountEqual([a.id, b.id], [r.id for r in rows])
+
+    def test_find_by_base_product_id(self):
+        """It should filter by base_product_id"""
+        r1 = RecommendationFactory(base_product_id=10, recommended_product_id=101)
+        r2 = RecommendationFactory(base_product_id=10, recommended_product_id=102)
+        r3 = RecommendationFactory(base_product_id=11, recommended_product_id=103)
+        r1.create()
+        r2.create()
+        r3.create()
+
+        q = Recommendation.find_by_base_product_id(10)
+        rows = q.all()
+        self.assertEqual(len(rows), 2)
+        self.assertCountEqual([r1.id, r2.id], [r.id for r in rows])
+
+    def test_find_by_recommendation_type_case_insensitive(self):
+        """It should match recommendation_type case-insensitively"""
+        r1 = RecommendationFactory(recommendation_type="cross-sell")
+        r2 = RecommendationFactory(recommendation_type="up-sell")
+        r1.create()
+        r2.create()
+
+        q = Recommendation.find_by_recommendation_type("CROSS-SELL")
+        rows = q.all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].id, r1.id)
+
+    def test_find_by_status_case_insensitive(self):
+        """It should match status case-insensitively"""
+        r_active = RecommendationFactory(status="active")
+        r_inactive = RecommendationFactory(status="inactive")
+        r_active.create()
+        r_inactive.create()
+
+        q = Recommendation.find_by_status("ACTIVE")
+        rows = q.all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].id, r_active.id)
+
+    def test_find_by_min_confidence_is_inclusive(self):
+        """It should include rows with confidence_score >= threshold"""
+        r_low = RecommendationFactory(confidence_score="0.40")
+        r_eq = RecommendationFactory(confidence_score="0.50")
+        r_high = RecommendationFactory(confidence_score="0.90")
+        r_low.create()
+        r_eq.create()
+        r_high.create()
+
+        q = Recommendation.find_by_min_confidence(0.50)
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertIn(r_eq.id, ids)
+        self.assertIn(r_high.id, ids)
+        self.assertNotIn(r_low.id, ids)
+
+    def test_serialize_contains_expected_fields(self):
+        """It should serialize to the expected dict shape/types"""
+        rec = RecommendationFactory(
+            base_product_id=7,
+            recommended_product_id=8,
+            recommendation_type="accessory",
+            status="active",
+            confidence_score="0.65",
+            base_product_price="199.99",
+            recommended_product_price="19.99",
+            base_product_description="Phone",
+            recommended_product_description="Case",
+        )
+        rec.create()
+
+        data = rec.serialize()
+        # ids & basics
+        self.assertEqual(data["recommendation_id"], rec.id)
+        self.assertEqual(data["base_product_id"], 7)
+        self.assertEqual(data["recommended_product_id"], 8)
+        self.assertEqual(data["recommendation_type"], "accessory")
+        self.assertEqual(data["status"], "active")
+        # numeric conversions -> float
+        self.assertIsInstance(data["confidence_score"], float)
+        self.assertAlmostEqual(data["confidence_score"], 0.65, places=6)
+        self.assertAlmostEqual(data["base_product_price"], 199.99, places=6)
+        self.assertAlmostEqual(data["recommended_product_price"], 19.99, places=6)
+        # descriptions
+        self.assertEqual(data["base_product_description"], "Phone")
+        self.assertEqual(data["recommended_product_description"], "Case")
+        # timestamps as ISO strings
+        self.assertIsInstance(data["created_date"], str)
+        self.assertIsInstance(data["updated_date"], str)

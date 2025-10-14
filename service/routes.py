@@ -40,7 +40,7 @@ def index():
             version="1.0",
             message="Welcome to the Recommendation Service! See docs at /apidocs.",
             docs="/apidocs",
-            list_url="/recommendations"
+            list_url="/recommendations",
         ),
         status.HTTP_200_OK,
     )
@@ -87,8 +87,8 @@ def create_recommendations():
     )
 
 
-######################################################################
-# UPDATE AN EXISTING PET
+#####################################################################
+# UPDATE AN EXISTING RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["PUT"])
 def update_recommendation(recommendation_id: int):
@@ -129,6 +129,9 @@ def update_recommendation(recommendation_id: int):
         return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
 
     return jsonify(rec.serialize()), status.HTTP_200_OK
+
+
+#####################################################################
 # DELETE A RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
@@ -150,6 +153,9 @@ def delete_recommendations(recommendation_id):
 
     app.logger.info("Recommendation with ID: %d delete complete.", recommendation_id)
     return {}, status.HTTP_204_NO_CONTENT
+
+
+#####################################################################
 # READ A Recommendation
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
@@ -173,6 +179,52 @@ def get_recommendations(recommendation_id):
 
     app.logger.info("Returning recommendation: %s", recommendation.id)
     return jsonify(recommendation.serialize()), status.HTTP_200_OK
+
+
+######################################################################
+# LIST RECOMMENDATIONS
+######################################################################
+@app.route("/recommendations", methods=["GET"])
+def list_recommendations():
+    """Returns recommendations, optionally filtered by exactly one criterion (Pets style)."""
+    app.logger.info("Request for recommendation list")
+
+    # Parse args
+    base_product_id = request.args.get("base_product_id", type=int)
+    recommendation_type = request.args.get("recommendation_type", type=str)
+    confidence_score = request.args.get("confidence_score", type=float)
+    rec_status = request.args.get("status", type=str)
+
+    # Decide which single filter to apply (elif chain), else return all
+    if base_product_id is not None:
+        app.logger.info("Find by base_product_id: %s", base_product_id)
+        recs = Recommendation.find_by_base_product_id(base_product_id)
+
+    elif recommendation_type:
+        norm_rt = recommendation_type.strip().lower()
+        app.logger.info("Find by recommendation_type: %s", norm_rt)
+        recs = Recommendation.find_by_recommendation_type(norm_rt)
+
+    elif rec_status:
+        norm_status = rec_status.strip().lower()
+        app.logger.info("Find by status: %s", norm_status)
+        recs = Recommendation.find_by_status(norm_status)
+
+    elif confidence_score is not None:
+        if confidence_score < 0 or confidence_score > 1:
+            return (
+                jsonify({"message": "confidence_score must be in [0, 1]"}),
+                status.HTTP_400_BAD_REQUEST,
+            )
+        app.logger.info("Find by min confidence_score: %s", confidence_score)
+        recs = Recommendation.find_by_min_confidence(confidence_score)
+    else:
+        app.logger.info("Find all")
+        recs = Recommendation.all()
+
+    results = [r.serialize() for r in recs]
+    app.logger.info("Returning %d recommendations", len(results))
+    return jsonify(results), status.HTTP_200_OK
 
 
 ######################################################################
