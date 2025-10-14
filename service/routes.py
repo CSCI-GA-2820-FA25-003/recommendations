@@ -21,9 +21,9 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
-from service.models import Recommendation
+from service.models import DataValidationError, Recommendation
 from service.common import status  # HTTP Status Codes
 
 
@@ -88,6 +88,47 @@ def create_recommendations():
 
 
 ######################################################################
+# UPDATE AN EXISTING PET
+######################################################################
+@app.route("/recommendations/<int:recommendation_id>", methods=["PUT"])
+def update_recommendation(recommendation_id: int):
+    """
+    Update an existing recommendation's editable fields.
+
+    Endpoint:
+        PUT /recommendations/<recommendation_id>
+
+    Request Body (application/json):
+        {
+          "recommendation_type": "up-sell" | "cross-sell" | "accessory",   # optional
+          "confidence_score": 0.0..1.0,                                   # optional
+            "status": "active" | "inactive",                                 # optional
+        }
+        At least one of the above fields must be provided.
+        Values are normalized/validated in the model; confidence_score must be in [0, 1].
+    """
+    app.logger.info("Request to Update recommendation with id: %s", recommendation_id)
+    check_content_type("application/json")
+    rec = Recommendation.find(recommendation_id)
+    if rec is None:
+        return (
+            jsonify({"message": "Recommendation not found"}),
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    data = request.get_json() or {}
+    if not data:  # {} or None after get_json
+        return (
+            jsonify({"message": "At least one field is required"}),
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        rec.update(data)  # model handles normalization + validation
+    except DataValidationError as e:
+        return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
+
+    return jsonify(rec.serialize()), status.HTTP_200_OK
 # DELETE A RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])

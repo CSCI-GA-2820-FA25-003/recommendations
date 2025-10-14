@@ -84,22 +84,48 @@ class Recommendation(db.Model):
             logger.error("Error creating record: %s", self)
             raise DataValidationError(e) from e
 
-    def update(self):
+    def update(self, data: dict | None = None) -> None:
         """
-        Updates a Recommendation to the database
+        Update this Recommendation (optionally applying partial fields) and commit.
+
+        Allowed updatable fields (for now):
+          - recommendation_type  (normalized to lowercase)
+          - confidence_score     (numeric in [0, 1])
+          - status              (normalized to lowercase)
+
+        Raises:
+          DataValidationError on invalid payload/values or DB error.
         """
-        logger.info(
-            "Updating recommendation %s between base product %s and recommended product %s",
-            self.id,
-            self.base_product_id,
-            self.recommended_product_id,
-        )
+        if not self.id:
+            raise DataValidationError("Update called with empty ID field")
+
+        if data:
+            if "recommendation_type" in data:
+                rt = str(data.get("recommendation_type")).strip().lower()
+                if not rt:
+                    raise DataValidationError("recommendation_type is required")
+                self.recommendation_type = rt
+            if "status" in data:
+                status = str(data.get("status")).strip().lower()
+                if not status:
+                    raise DataValidationError("status is required")
+                self.status = status
+
+            if "confidence_score" in data:
+                try:
+                    cs = Decimal(str(data.get("confidence_score")))
+                except Exception as e:
+                    raise DataValidationError("confidence_score must be numeric") from e
+                if cs < Decimal("0") or cs > Decimal("1"):
+                    raise DataValidationError("confidence_score must be in [0, 1]")
+                self.confidence_score = cs
+
         self.updated_date = datetime.now(timezone.utc)
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error updating record: %s", self)
+            logger.error("Error updating record id=%s: %s", self.id, e)
             raise DataValidationError(e) from e
 
     def delete(self):
