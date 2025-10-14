@@ -146,27 +146,24 @@ class TestYourResourceService(TestCase):
     def test_get_recommendation(self):
         """It should Get a single Recommendation"""
         # get the id of a recommendation
-        test_recommendation = self._create_recommendations(1)[0]
-        recommendation_id = test_recommendation["recommendation_id"]
+        test_recommendation = RecommendationFactory()
+        test_recommendation.create()
+        recommendation_id = test_recommendation.id
         response = self.client.get(f"{BASE_URL}/{recommendation_id}")
         data = response.get_json()
 
-        self.assertEqual(
-            data["recommendation_id"], test_recommendation["recommendation_id"]
-        )
-        self.assertEqual(
-            data["base_product_id"], test_recommendation["base_product_id"]
-        )
+        self.assertEqual(data["recommendation_id"], test_recommendation.id)
+        self.assertEqual(data["base_product_id"], test_recommendation.base_product_id)
         self.assertEqual(
             data["recommended_product_id"],
-            test_recommendation["recommended_product_id"],
+            test_recommendation.recommended_product_id,
         )
         self.assertEqual(
-            data["recommendation_type"], test_recommendation["recommendation_type"]
+            data["recommendation_type"], test_recommendation.recommendation_type
         )
-        self.assertEqual(data["status"], test_recommendation["status"])
+        self.assertEqual(data["status"], test_recommendation.status)
         self.assertAlmostEqual(
-            data["confidence_score"], float(test_recommendation["confidence_score"])
+            data["confidence_score"], float(test_recommendation.confidence_score)
         )
 
     def test_get_recommendation_not_found(self):
