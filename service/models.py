@@ -217,6 +217,12 @@ class Recommendation(db.Model):
         return cls.query.all()
 
     @classmethod
+    def find(cls, by_id):
+        """Finds a Recommendation by it's ID"""
+        logger.info("Processing lookup for id %s ...", by_id)
+        return cls.query.session.get(cls, by_id)
+
+    @classmethod
     def find_by_base_product_id(cls, base_product_id: int):
         """Returns all Recommendations with the given base product id"""
         logger.info("Processing base_product_id query for %s ...", base_product_id)
