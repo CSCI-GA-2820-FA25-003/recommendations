@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
 
-from flask import jsonify, request, abort
+from flask import jsonify, request, abort, url_for
 from flask import current_app as app  # Import Flask application
 from service.models import DataValidationError, Recommendation
 from service.common import status  # HTTP Status Codes
@@ -74,11 +74,9 @@ def create_recommendations():
     app.logger.info("Recommendation with new id [%s] saved!", recommendation.id)
 
     # Return the location of the new Recommendation
-    # Todo: uncomment this code when get_recommendations is implemented
-    # location_url = url_for(
-    #     "get_recommendations", recommendation_id=recommendation.id, _external=True
-    # )
-    location_url = "unknown"
+    location_url = url_for(
+        "get_recommendations", recommendation_id=recommendation.id, _external=True
+    )
 
     return (
         jsonify(recommendation.serialize()),

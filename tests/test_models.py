@@ -23,10 +23,10 @@ from decimal import Decimal
 import os
 import logging
 from unittest import TestCase
+from unittest.mock import patch
 from wsgi import app
 from service.models import DataValidationError, Recommendation, db
 from .factories import RecommendationFactory
-from unittest.mock import patch
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"

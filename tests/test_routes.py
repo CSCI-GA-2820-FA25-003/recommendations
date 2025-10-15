@@ -143,6 +143,43 @@ class TestYourResourceService(TestCase):
             test_recommendation.recommended_product_description,
         )
 
+        # Check that the location header was correct
+        response = self.client.get(location)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        new_recommendation = response.get_json()
+        self.assertEqual(
+            new_recommendation["base_product_id"], test_recommendation.base_product_id
+        )
+        self.assertEqual(
+            new_recommendation["recommended_product_id"],
+            test_recommendation.recommended_product_id,
+        )
+        self.assertEqual(
+            new_recommendation["recommendation_type"],
+            test_recommendation.recommendation_type,
+        )
+        self.assertEqual(new_recommendation["status"], test_recommendation.status)
+        self.assertEqual(
+            Decimal(str(new_recommendation["confidence_score"])),
+            test_recommendation.confidence_score,
+        )
+        self.assertEqual(
+            Decimal(str(new_recommendation["base_product_price"])),
+            test_recommendation.base_product_price,
+        )
+        self.assertEqual(
+            Decimal(str(new_recommendation["recommended_product_price"])),
+            test_recommendation.recommended_product_price,
+        )
+        self.assertEqual(
+            new_recommendation["base_product_description"],
+            test_recommendation.base_product_description,
+        )
+        self.assertEqual(
+            new_recommendation["recommended_product_description"],
+            test_recommendation.recommended_product_description,
+        )
+
     # ----------------------------------------------------------
     # Additional Test Cases Added Here
     # ----------------------------------------------------------
@@ -198,43 +235,6 @@ class TestYourResourceService(TestCase):
         data = response.get_json()
         logging.debug("Response data = %s", data)
         self.assertIn("was not found", data["message"])
-
-        # Todo: Uncomment this code when get_recommendations in implemented
-        # # Check that the location header was correct
-        # response = self.client.get(location)
-        # self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # new_recommendation = response.get_json()
-        # self.assertEqual(
-        #     new_recommendation["base_product_id"], test_recommendation.base_product_id
-        # )
-        # self.assertEqual(
-        #     new_recommendation["recommended_product_id"],
-        #     test_recommendation.recommended_product_id,
-        # )
-        # self.assertEqual(
-        #     new_recommendation["recommendation_type"],
-        #     test_recommendation.recommendation_type,
-        # )
-        # self.assertEqual(new_recommendation["status"], test_recommendation.status)
-        # self.assertEqual(
-        #     new_recommendation["confidence_score"], test_recommendation.confidence_score
-        # )
-        # self.assertEqual(
-        #     new_recommendation["base_product_price"],
-        #     test_recommendation.base_product_price,
-        # )
-        # self.assertEqual(
-        #     new_recommendation["recommended_product_price"],
-        #     test_recommendation.recommended_product_price,
-        # )
-        # self.assertEqual(
-        #     new_recommendation["base_product_description"],
-        #     test_recommendation.base_product_description,
-        # )
-        # self.assertEqual(
-        #     new_recommendation["recommended_product_description"],
-        #     test_recommendation.recommended_product_description,
-        # )
 
     def test_update_happy_path_partial_fields(self):
         """It should Update an existing Recommendation's editable fields"""
