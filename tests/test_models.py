@@ -26,6 +26,7 @@ from unittest import TestCase
 from wsgi import app
 from service.models import DataValidationError, Recommendation, db
 from .factories import RecommendationFactory
+from unittest.mock import patch
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
@@ -327,3 +328,79 @@ class TestRecommendation(TestCase):
         # timestamps as ISO strings
         self.assertIsInstance(data["created_date"], str)
         self.assertIsInstance(data["updated_date"], str)
+
+    # ----------------------------------------------------------
+    # Additional Test Cases Added Here
+    # ----------------------------------------------------------
+
+    # Test model.py line 62
+    def test_repr(self):
+        """It should have a readable __repr__"""
+        rec = RecommendationFactory(recommendation_type="up-sell")
+        rec.create()
+        repr_str = repr(rec)
+        self.assertIn("Recommendation id=[", repr_str)
+        self.assertIn("type=up-sell", repr_str)
+        self.assertIn(f"base={rec.base_product_id}", repr_str)
+        self.assertIn(f"rec={rec.recommended_product_id}", repr_str)
+
+    # Test model.py line 153, 159
+    def test_helpers_to_decimal_and_to_float(self):
+        """It should convert using _to_decimal/_to_float"""
+        self.assertIsNone(Recommendation._to_decimal(None))
+        self.assertIsNone(Recommendation._to_float(None))
+
+        self.assertEqual(
+            Recommendation._to_decimal("1.23"), Recommendation._to_decimal(1.23)
+        )
+        self.assertAlmostEqual(
+            Recommendation._to_float(Recommendation._to_decimal("0.90")), 0.90, places=6
+        )
+
+    # Test model.py line 229
+    def test_deserialize_type_error_when_none_payload(self):
+        """It should raise DataValidationError when payload is None"""
+        with self.assertRaises(DataValidationError):
+            Recommendation().deserialize(None)
+
+    # Test models.py line 225
+    def test_deserialize_missing_required_field(self):
+        """It should raise DataValidationError when a required field is missing"""
+        payload = {
+            # "base_product_id" missing on purpose
+            "recommended_product_id": 2002,
+            "recommendation_type": "up-sell",
+            "status": "inactive",
+            "confidence_score": "0.30",
+        }
+        rec = Recommendation()
+        with self.assertRaises(DataValidationError):
+            rec.deserialize(payload)
+
+
+######################################################################
+#  T E S T   E X C E P T I O N   H A N D L E R S
+######################################################################
+class TestExceptionHandlers(TestCase):
+    """Pet Model Exception Handlers"""
+
+    @patch("service.models.db.session.commit")
+    def test_create_exception(self, exception_mock):
+        """It should catch a create exception"""
+        exception_mock.side_effect = Exception()
+        recommendation = RecommendationFactory()
+        self.assertRaises(DataValidationError, recommendation.create)
+
+    @patch("service.models.db.session.commit")
+    def test_update_exception(self, exception_mock):
+        """It should catch a update exception"""
+        exception_mock.side_effect = Exception()
+        recommendation = RecommendationFactory()
+        self.assertRaises(DataValidationError, recommendation.update)
+
+    @patch("service.models.db.session.commit")
+    def test_delete_exception(self, exception_mock):
+        """It should catch a delete exception"""
+        exception_mock.side_effect = Exception()
+        recommendation = RecommendationFactory()
+        self.assertRaises(DataValidationError, recommendation.delete)
