@@ -144,6 +144,28 @@ class TestYourResourceService(TestCase):
         )
 
     # ----------------------------------------------------------
+    # Additional Test Cases Added Here
+    # ----------------------------------------------------------
+
+    def test_create_recommendation_no_content_type(self):
+        """It should not Create a Recommendation with no Content-Type"""
+        # test_recommendation = RecommendationFactory()
+        # Remove Content-Type header => check_content_type error
+        response = self.client.post(BASE_URL, data="test")
+        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+
+    def test_create_recommendation_wrong_content_type(self):
+        """It should not Create a Recommendation with wrong Content-Type"""
+        test_recommendation = RecommendationFactory()
+        # Send data with wrong content type
+        response = self.client.post(
+            BASE_URL,
+            data=str(test_recommendation.serialize()),
+            content_type="text/plain",
+        )
+        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+
+    # ----------------------------------------------------------
     # TEST READ
     # ----------------------------------------------------------
     def test_get_recommendation(self):
@@ -268,6 +290,22 @@ class TestYourResourceService(TestCase):
         resp = self.client.put(f"{BASE_URL}/{rec.id}", json={})
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert "at least one" in resp.get_json().get("message", "").lower()
+
+    # ----------------------------------------------------------
+    # Additional Test Cases Added Here
+    # ----------------------------------------------------------
+
+    # Test routes.py line 128-129
+    def test_update_with_invalid_data(self):
+        """It should return 400 when update data fails validation"""
+        recommendation = RecommendationFactory()
+        recommendation.create()
+        # invalid confidence_score => DataValidationError
+        payload = {"confidence_score": 1.5}
+        response = self.client.put(f"{BASE_URL}/{recommendation.id}", json=payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        data = response.get_json()
+        self.assertIn("message", data)
 
     # ----------------------------------------------------------
     # TEST DELETE
