@@ -35,13 +35,92 @@ flask run -h 0.0.0.0 -p 8080
 ```
 
 The service will be available at:  
-👉 **http://127.0.0.1:8080**
+👉 **http://localhost:8080**
+
+---
+
+## Automatic Setup
+
+The repository can be initialized as a GitHub template by pressing the green **“Use this template”** button.  
+This allows your team to create a new repository based on this scaffold.
+
+---
+
+## Manual Setup
+
+You can also manually copy starter code into an existing project.  
+If you do this, ensure you also copy hidden files that some GUI file managers may skip:
+
+```bash
+cp .gitignore      ../<your_repo_folder>/
+cp .gitattributes  ../<your_repo_folder>/
+```
+
+For configuration, copy the provided `dot-env-example` and update as needed:
+
+```
+FLASK_APP=wsgi:app
+PORT=8080
+DATABASE_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+SECRET_KEY=
+LOG_LEVEL=INFO
+```
+
+---
+
+## Contents
+
+```text
+.gitignore          - ignores unnecessary files
+.gitattributes      - handles CRLF line endings
+dot-env-example     - environment variables sample
+Pipfile             - Pipenv dependency manager (Python 3.11)
+Procfile            - Gunicorn entry for deployment
+Makefile            - developer tasks (install/lint/test/run/deploy)
+setup.cfg           - lint/test configuration
+wsgi.py             - WSGI entry point (create_app())
+
+service/                   - main application package
+├── __init__.py            - Flask app factory
+├── config.py              - configuration settings
+├── models.py              - SQLAlchemy model (Recommendation)
+├── routes.py              - REST API routes
+└── common/                - helper modules (CLI, logging, errors, status codes)
+
+tests/                     - pytest suite
+├── factories.py           - data factories
+├── test_cli_commands.py   - CLI tests
+├── test_models.py         - model tests
+└── test_routes.py         - route tests
+```
+
+---
+
+## Makefile Commands
+
+Common developer commands:
+
+```bash
+make install     # install dependencies
+make lint        # check code style
+make format      # auto-format with black/isort
+make test        # run all tests
+make coverage    # run tests with coverage
+make run         # run Flask locally (wsgi:app)
+make build/push  # container image build & push
+make deploy      # deploy to local Kubernetes cluster
+```
+
+> Run `make help` to view all available targets.
 
 ---
 
 ## API Overview
 
+The following section provides **example API calls**, including request and response structures to guide developers during testing and integration.
+
 ### Root Endpoint
+
 ```
 GET /
 → 200 OK
@@ -51,7 +130,9 @@ Returns a simple landing page text.
 ---
 
 ### Create a Recommendation
-```
+
+#### Example Request
+```http
 POST /recommendations
 Content-Type: application/json
 
@@ -66,74 +147,184 @@ Content-Type: application/json
   "base_product_description": "Base product",
   "recommended_product_description": "Accessory"
 }
+```
 
-→ 201 Created
-Location: /recommendations/<id>
+#### Example Response
+```http
+201 Created
+Location: /recommendations/1
+
+{
+  "id": 1,
+  "base_product_id": 1001,
+  "recommended_product_id": 2001,
+  "recommendation_type": "cross-sell",
+  "status": "active",
+  "confidence_score": 0.85
+}
 ```
 
 ---
 
 ### Read a Recommendation
-```
-GET /recommendations/<id>
-→ 200 OK | 404 Not Found
-```
-Retrieves a single recommendation by its ID.
 
----
+#### Example Request
+```http
+GET /recommendations/1
+```
 
-### List All Recommendations
-```
-GET /recommendations
-→ 200 OK
-```
-Returns a list of all recommendations.  
-Optionally supports query parameters such as:
-```
-/recommendations?type=cross-sell&status=active
+#### Example Response
+```http
+200 OK
+
+{
+  "id": 1,
+  "base_product_id": 1001,
+  "recommended_product_id": 2001,
+  "recommendation_type": "cross-sell",
+  "status": "active",
+  "confidence_score": 0.85
+}
 ```
 
 ---
 
 ### Update a Recommendation
-```
-PUT /recommendations/<id>
+
+#### Example Request
+```http
+PUT /recommendations/1
 Content-Type: application/json
 
 {
   "status": "inactive",
-  "confidence_score": 0.72
+  "confidence_score": 0.6
 }
-
-→ 200 OK | 404 Not Found
 ```
-Updates one or more fields of an existing recommendation.
+
+#### Example Response
+```http
+200 OK
+
+{
+  "id": 1,
+  "base_product_id": 1001,
+  "recommended_product_id": 2001,
+  "recommendation_type": "cross-sell",
+  "status": "inactive",
+  "confidence_score": 0.6
+}
+```
 
 ---
 
 ### Delete a Recommendation
+
+#### Example Request
+```http
+DELETE /recommendations/1
 ```
-DELETE /recommendations/<id>
-→ 204 No Content | 404 Not Found
+
+#### Example Response
+```http
+204 No Content
 ```
-Deletes a specific recommendation from the database.
 
 ---
 
-> ✅ With these endpoints, the service now supports full **CRUD** operations:
-> **Create**, **Read**, **Update**, and **Delete**, plus **List** for retrieving multiple records.
+### List All Recommendations
+
+#### Example Request
+```http
+GET /recommendations
+```
+
+#### Example Response
+```http
+200 OK
+
+[
+  {
+    "id": 1,
+    "base_product_id": 1001,
+    "recommended_product_id": 2001,
+    "recommendation_type": "cross-sell",
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "base_product_id": 3001,
+    "recommended_product_id": 4001,
+    "recommendation_type": "up-sell",
+    "status": "inactive"
+  }
+]
+```
 
 ---
 
-## Roadmap
+## Data Model
 
-- [x] Add Read (CRUD terminology) instead of Retrieve
-- [x] Document List, Update, and Delete endpoints
-- [ ] Implement `GET /recommendations` (list all or filter by status/type)
-- [ ] Add `PUT` and `DELETE` endpoints in the Flask app
-- [ ] Add `Location` header in POST response dynamically
-- [ ] Improve factory seeding for integration testing
-- [ ] CI pipeline with GitHub Actions
+The `Recommendation` model is defined in `service/models.py` using SQLAlchemy.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | Integer | Primary key |
+| base_product_id | Integer | ID of the base product |
+| recommended_product_id | Integer | ID of the recommended product |
+| recommendation_type | Enum | `"cross-sell"`, `"up-sell"`, `"accessory"` |
+| status | Enum | `"active"` or `"inactive"` |
+| confidence_score | Numeric(3,2) | Confidence value (e.g., 0.85) |
+| base_product_price | Numeric(14,2) | Optional |
+| recommended_product_price | Numeric(14,2) | Optional |
+| base_product_description | String(1023) | Optional |
+| recommended_product_description | String(1023) | Optional |
+| created_date | DateTime | Auto timestamp |
+| updated_date | DateTime | Auto timestamp |
+
+---
+
+## Database
+
+Configured for **PostgreSQL** by default:
+
+```
+postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+```
+
+Tables are created automatically on app startup with `db.create_all()`.
+
+---
+
+## Testing
+
+Run unit tests with:
+
+```bash
+make test
+# or
+pytest -q
+```
+
+Generate a coverage report:
+
+```bash
+make coverage
+```
+
+Tests are located in the `/tests` directory.
+
+---
+
+## Deployment
+
+Production uses **Gunicorn** via the `Procfile`:
+
+```
+web: gunicorn --bind 0.0.0.0:$PORT wsgi:app
+```
+
+Docker and Kubernetes helpers are available through the Makefile (`make build`, `make cluster`, `make deploy`).
 
 ---
 
@@ -141,3 +332,5 @@ Deletes a specific recommendation from the database.
 
 Licensed under the **Apache License 2.0**.  
 See [LICENSE](LICENSE) for details.
+
+This repository is part of the **NYU CSCI-GA.2820 DevOps and Agile Methodologies** course.
