@@ -294,3 +294,36 @@ class Recommendation(db.Model):  # pylint: disable=too-many-instance-attributes
         """Returns all Recommendations with confidence_score >= threshold"""
         logger.info("Processing confidence_score >= %s query ...", threshold)
         return cls.query.filter(cls.confidence_score >= threshold)
+
+    # ----------------------------------------------------------
+    #  Multiple Filters
+    # ----------------------------------------------------------
+    @classmethod
+    def filter_many(
+        cls,
+        *,
+        base_product_id: int | None = None,
+        recommendation_type: str | None = None,
+        status: str | None = None,
+        min_confidence: float | None = None,
+    ):
+        """
+        Returns a query with all provided filters "AND" together.
+        String inputs are set to lowercase
+        min_confidence is inclusive (>=)
+        """
+        q = cls.query
+
+        if base_product_id is not None:
+            q = q.filter(cls.base_product_id == base_product_id)
+
+        if recommendation_type:
+            q = q.filter(cls.recommendation_type == recommendation_type.strip().lower())
+
+        if status:
+            q = q.filter(cls.status == status.strip().lower())
+
+        if min_confidence is not None:
+            q = q.filter(cls.confidence_score >= min_confidence)
+
+        return q

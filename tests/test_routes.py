@@ -433,3 +433,77 @@ class TestYourResourceService(TestCase):
         assert resp.status_code == status.HTTP_200_OK
         data = resp.get_json()
         assert data == []
+
+    # ----------------------------------------------------------
+    # Test Cases for multiple filters
+    # ----------------------------------------------------------
+
+    def test_multiple_filters_status_and_type(self):
+        """It should return intersection of status and recommendation_type filters"""
+        a = RecommendationFactory(status="active", recommendation_type="up-sell")
+        b = RecommendationFactory(status="active", recommendation_type="cross-sell")
+        c = RecommendationFactory(status="inactive", recommendation_type="up-sell")
+        a.create()
+        b.create()
+        c.create()
+
+        resp = self.client.get(f"{BASE_URL}?status=ACTIVE&recommendation_type=UP-SELL")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {a.id}
+
+    def test_multiple_filters_base_and_status(self):
+        """It should AND base_product_id and status together"""
+        a = RecommendationFactory(base_product_id=10, status="active")
+        b = RecommendationFactory(base_product_id=10, status="inactive")
+        c = RecommendationFactory(base_product_id=11, status="active")
+        a.create()
+        b.create()
+        c.create()
+
+        resp = self.client.get(f"{BASE_URL}?base_product_id=10&status=active")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {a.id}
+
+    def test_multiple_filters_include_confidence_threshold(self):
+        """It should apply min confidence along with other filters (inclusive >=)"""
+        a = RecommendationFactory(
+            status="active",
+            recommendation_type="up-sell",
+            confidence_score=Decimal("0.50"),
+        )
+        b = RecommendationFactory(
+            status="active",
+            recommendation_type="up-sell",
+            confidence_score=Decimal("0.90"),
+        )
+        c = RecommendationFactory(
+            status="active",
+            recommendation_type="cross-sell",
+            confidence_score=Decimal("0.95"),
+        )
+        a.create()
+        b.create()
+        c.create()
+
+        # active + up-sell + confidence_score>=0.75 -> only b
+        resp = self.client.get(
+            f"{BASE_URL}?status=active&recommendation_type=up-sell&confidence_score=0.75"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        ids = {row["recommendation_id"] for row in data}
+        assert ids == {b.id}
+
+    def test_multiple_filters_empty_result_ok(self):
+        """It should return 200 with [] when combined filters match nothing"""
+        a = RecommendationFactory(status="inactive", recommendation_type="cross-sell")
+        a.create()
+        resp = self.client.get(
+            f"{BASE_URL}?status=active&recommendation_type=cross-sell"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.get_json() == []
