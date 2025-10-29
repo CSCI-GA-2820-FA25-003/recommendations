@@ -25,7 +25,12 @@ import logging
 from unittest import TestCase
 from unittest.mock import patch
 from wsgi import app
-from service.models import DataValidationError, Recommendation, db
+from service.models import (
+    DataValidationError,
+    ResourceNotFoundError,
+    Recommendation,
+    db,
+)
 from .factories import RecommendationFactory
 
 DATABASE_URI = os.getenv(
@@ -479,3 +484,183 @@ class TestExceptionHandlers(TestCase):
         exception_mock.side_effect = Exception()
         recommendation = RecommendationFactory()
         self.assertRaises(DataValidationError, recommendation.delete)
+
+    def test_apply_flat_discount_to_accessories_success(self):
+        """It should apply flat discount to accessories successfully"""
+        # Create accessory recommendations
+        Recommendation.query.delete()
+        db.session.commit()
+        a1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        a2 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("200.00"),
+            recommended_product_price=Decimal("25.00"),
+        )
+        a1.create()
+        a2.create()
+
+        updated_ids, count = Recommendation.apply_flat_discount_to_accessories(
+            Decimal("10")
+        )
+
+        self.assertEqual(count, 2)
+        self.assertEqual(set(updated_ids), {a1.id, a2.id})
+
+        # Verify prices were updated
+        got_a1 = Recommendation.find(a1.id)
+        got_a2 = Recommendation.find(a2.id)
+        self.assertEqual(got_a1.base_product_price, Decimal("90.00"))
+        self.assertEqual(got_a1.recommended_product_price, Decimal("45.00"))
+        self.assertEqual(got_a2.base_product_price, Decimal("180.00"))
+        self.assertEqual(got_a2.recommended_product_price, Decimal("22.50"))
+
+    def test_apply_flat_discount_to_accessories_invalid_discount(self):
+        """It should raise DataValidationError for invalid discount percentage"""
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_flat_discount_to_accessories(Decimal("0"))
+        self.assertIn("Discount must be between 0 and 100", str(context.exception))
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_flat_discount_to_accessories(Decimal("100"))
+        self.assertIn("Discount must be between 0 and 100", str(context.exception))
+
+    def test_apply_custom_discounts_success(self):
+        """It should apply custom discounts successfully"""
+        r1 = RecommendationFactory(
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("200.00"),
+            recommended_product_price=Decimal("25.00"),
+        )
+        r1.create()
+        r2.create()
+
+        discount_mappings = {
+            str(r1.id): {"base_product_price": 10, "recommended_product_price": 20},
+            str(r2.id): {"base_product_price": 15},
+        }
+
+        updated_ids = Recommendation.apply_custom_discounts(discount_mappings)
+
+        self.assertEqual(set(updated_ids), {r1.id, r2.id})
+
+        # Verify prices were updated
+        got_r1 = Recommendation.find(r1.id)
+        got_r2 = Recommendation.find(r2.id)
+        self.assertEqual(got_r1.base_product_price, Decimal("90.00"))  # 10% off
+        self.assertEqual(got_r1.recommended_product_price, Decimal("40.00"))  # 20% off
+        self.assertEqual(got_r2.base_product_price, Decimal("170.00"))  # 15% off
+        self.assertEqual(
+            got_r2.recommended_product_price, Decimal("25.00")
+        )  # unchanged
+
+    def test_apply_custom_discounts_invalid_mappings(self):
+        """It should raise DataValidationError for invalid discount mappings"""
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts({})
+        self.assertIn(
+            "JSON body must map recommendation_id to discount objects",
+            str(context.exception),
+        )
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts("invalid")
+        self.assertIn(
+            "JSON body must map recommendation_id to discount objects",
+            str(context.exception),
+        )
+
+    def test_apply_custom_discounts_invalid_recommendation_id_keys(self):
+        """It should raise DataValidationError for non-numeric recommendation ID keys"""
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts(
+                {"invalid": {"base_product_price": 10}}
+            )
+        self.assertIn("Keys must be numeric recommendation IDs", str(context.exception))
+
+    def test_apply_custom_discounts_invalid_discount_config(self):
+        """It should raise DataValidationError for invalid discount configuration"""
+        r = RecommendationFactory()
+        r.create()
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts({str(r.id): "invalid"})
+        self.assertIn(
+            "Each value must be an object with price discount fields",
+            str(context.exception),
+        )
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts({str(r.id): {}})
+        self.assertIn(
+            "Each value must be an object with price discount fields",
+            str(context.exception),
+        )
+
+    def test_apply_custom_discounts_no_discount_fields(self):
+        """It should raise DataValidationError when no discount fields are provided"""
+        r = RecommendationFactory()
+        r.create()
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts({str(r.id): {"invalid_field": 10}})
+        self.assertIn(
+            "Provide at least one of base_product_price or recommended_product_price",
+            str(context.exception),
+        )
+
+    def test_apply_custom_discounts_invalid_discount_percentages(self):
+        """It should raise DataValidationError for invalid discount percentages"""
+        r = RecommendationFactory()
+        r.create()
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts(
+                {str(r.id): {"base_product_price": 0}}
+            )
+        self.assertIn("Discount must be between 0 and 100", str(context.exception))
+
+        with self.assertRaises(DataValidationError) as context:
+            Recommendation.apply_custom_discounts(
+                {str(r.id): {"base_product_price": 100}}
+            )
+        self.assertIn("Discount must be between 0 and 100", str(context.exception))
+
+    def test_apply_custom_discounts_nonexistent_recommendation_ids(self):
+        """It should skip non-existent recommendation IDs"""
+        discount_mappings = {
+            "99999": {"base_product_price": 10},  # Non-existent ID
+            "99998": {"recommended_product_price": 20},  # Non-existent ID
+        }
+
+        updated_ids = Recommendation.apply_custom_discounts(discount_mappings)
+        self.assertEqual(updated_ids, [])  # No updates since IDs don't exist
+
+    def test_apply_custom_discounts_with_null_prices(self):
+        """It should handle recommendations with null prices correctly"""
+        r1 = RecommendationFactory(
+            base_product_price=None, recommended_product_price=Decimal("50.00")
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("100.00"), recommended_product_price=None
+        )
+        r1.create()
+        r2.create()
+
+        discount_mappings = {
+            str(r1.id): {
+                "base_product_price": 20
+            },  # Should be skipped (base_price is null)
+            str(r2.id): {
+                "recommended_product_price": 30
+            },  # Should be skipped (rec_price is null)
+        }
+
+        updated_ids = Recommendation.apply_custom_discounts(discount_mappings)
+        self.assertEqual(updated_ids, [])  # No updates since prices are null
