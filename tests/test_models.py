@@ -382,12 +382,85 @@ class TestRecommendation(TestCase):
         with self.assertRaises(DataValidationError):
             rec.deserialize(payload)
 
+    # ----------------------------------------------------------
+    #  Multiple filters
+    # ----------------------------------------------------------
+    def test_filter_many_status_and_type(self):
+        """filter_many: AND status + recommendation_type, case insensitive"""
+        a = RecommendationFactory(status="active", recommendation_type="up-sell")
+        b = RecommendationFactory(status="active", recommendation_type="cross-sell")
+        c = RecommendationFactory(status="inactive", recommendation_type="up-sell")
+        a.create()
+        b.create()
+        c.create()
+
+        q = Recommendation.filter_many(status="ACTIVE", recommendation_type="UP-SELL")
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertEqual(ids, {a.id})
+
+    def test_filter_many_base_status_confidence(self):
+        """filter_many: base_product_id + status + min_confidence (>=)"""
+        a = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.50")
+        )
+        b = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.90")
+        )
+        c = RecommendationFactory(
+            base_product_id=10, status="inactive", confidence_score=Decimal("0.95")
+        )
+        d = RecommendationFactory(
+            base_product_id=11, status="active", confidence_score=Decimal("0.99")
+        )
+        a.create()
+        b.create()
+        c.create()
+        d.create()
+
+        q = Recommendation.filter_many(
+            base_product_id=10,
+            status="ACTIVE",
+            min_confidence=0.75,
+        )
+        rows = q.all()
+        ids = {r.id for r in rows}
+        # only b meet: base=10 & status=active, confidence>=0.75
+        self.assertEqual(ids, {b.id})
+
+    def test_filter_many_min_confidence_inclusive(self):
+        """filter_many: min_confidence should >= (inclusive)"""
+        r_low = RecommendationFactory(confidence_score=Decimal("0.40"))
+        r_eq = RecommendationFactory(confidence_score=Decimal("0.50"))
+        r_hi = RecommendationFactory(confidence_score=Decimal("0.90"))
+        r_low.create()
+        r_eq.create()
+        r_hi.create()
+
+        q = Recommendation.filter_many(min_confidence=0.50)
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertIn(r_eq.id, ids)
+        self.assertIn(r_hi.id, ids)
+        self.assertNotIn(r_low.id, ids)
+
+    def test_filter_many_no_filters_returns_all(self):
+        """filter_many: Recommendation.all() if without any filter"""
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        a.create()
+        b.create()
+        self.assertCountEqual(
+            [r.id for r in Recommendation.filter_many().all()],
+            [r.id for r in Recommendation.all()],
+        )
+
 
 ######################################################################
 #  T E S T   E X C E P T I O N   H A N D L E R S
 ######################################################################
 class TestExceptionHandlers(TestCase):
-    """Recommendation Model Exception Handlers"""
+    """Recommendations Model Exception Handlers"""
 
     @patch("service.models.db.session.commit")
     def test_create_exception(self, exception_mock):
@@ -396,12 +469,14 @@ class TestExceptionHandlers(TestCase):
         recommendation = RecommendationFactory()
         self.assertRaises(DataValidationError, recommendation.create)
 
-    @patch("service.models.db.session.commit")
-    def test_update_exception(self, exception_mock):
-        """It should catch a update exception"""
-        exception_mock.side_effect = Exception()
-        recommendation = RecommendationFactory()
-        self.assertRaises(DataValidationError, recommendation.update)
+    def test_update_exception(self):
+        """It should catch an update exception"""
+        recommendation = RecommendationFactory(status="active", confidence_score="0.5")
+        recommendation.create()
+
+        with patch("service.models.db.session.commit", side_effect=Exception("boom")):
+            with self.assertRaises(DataValidationError):
+                recommendation.update({"status": "active"})
 
     @patch("service.models.db.session.commit")
     def test_delete_exception(self, exception_mock):
