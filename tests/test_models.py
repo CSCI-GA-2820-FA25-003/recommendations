@@ -382,7 +382,7 @@ class TestRecommendation(TestCase):
 #  T E S T   E X C E P T I O N   H A N D L E R S
 ######################################################################
 class TestExceptionHandlers(TestCase):
-    """Pet Model Exception Handlers"""
+    """Recommendations Model Exception Handlers"""
 
     @patch("service.models.db.session.commit")
     def test_create_exception(self, exception_mock):
@@ -391,12 +391,14 @@ class TestExceptionHandlers(TestCase):
         recommendation = RecommendationFactory()
         self.assertRaises(DataValidationError, recommendation.create)
 
-    @patch("service.models.db.session.commit")
-    def test_update_exception(self, exception_mock):
-        """It should catch a update exception"""
-        exception_mock.side_effect = Exception()
-        recommendation = RecommendationFactory()
-        self.assertRaises(DataValidationError, recommendation.update)
+    def test_update_exception(self):
+        """It should catch an update exception"""
+        recommendation = RecommendationFactory(status="active", confidence_score="0.5")
+        recommendation.create()
+
+        with patch("service.models.db.session.commit", side_effect=Exception("boom")):
+            with self.assertRaises(DataValidationError):
+                recommendation.update({"status": "active"})
 
     @patch("service.models.db.session.commit")
     def test_delete_exception(self, exception_mock):
