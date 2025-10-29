@@ -396,10 +396,18 @@ class TestRecommendation(TestCase):
 
     def test_filter_many_base_status_confidence(self):
         """filter_many: base_product_id + status + min_confidence (>=)"""
-        a = RecommendationFactory(base_product_id=10, status="active", confidence_score=Decimal("0.50"))
-        b = RecommendationFactory(base_product_id=10, status="active", confidence_score=Decimal("0.90"))
-        c = RecommendationFactory(base_product_id=10, status="inactive", confidence_score=Decimal("0.95"))
-        d = RecommendationFactory(base_product_id=11, status="active", confidence_score=Decimal("0.99"))
+        a = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.50")
+        )
+        b = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.90")
+        )
+        c = RecommendationFactory(
+            base_product_id=10, status="inactive", confidence_score=Decimal("0.95")
+        )
+        d = RecommendationFactory(
+            base_product_id=11, status="active", confidence_score=Decimal("0.99")
+        )
         a.create()
         b.create()
         c.create()
@@ -412,14 +420,14 @@ class TestRecommendation(TestCase):
         )
         rows = q.all()
         ids = {r.id for r in rows}
-        # only b meet: base=10 & status=active, confidence>=0.75 
+        # only b meet: base=10 & status=active, confidence>=0.75
         self.assertEqual(ids, {b.id})
 
     def test_filter_many_min_confidence_inclusive(self):
         """filter_many: min_confidence should >= (inclusive)"""
         r_low = RecommendationFactory(confidence_score=Decimal("0.40"))
-        r_eq  = RecommendationFactory(confidence_score=Decimal("0.50"))
-        r_hi  = RecommendationFactory(confidence_score=Decimal("0.90"))
+        r_eq = RecommendationFactory(confidence_score=Decimal("0.50"))
+        r_hi = RecommendationFactory(confidence_score=Decimal("0.90"))
         r_low.create()
         r_eq.create()
         r_hi.create()
