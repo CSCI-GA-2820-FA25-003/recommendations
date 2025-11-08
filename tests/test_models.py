@@ -27,6 +27,7 @@ from unittest.mock import patch
 from wsgi import app
 from service.models import (
     DataValidationError,
+    ResourceNotFoundError,
     Recommendation,
     db,
 )
@@ -484,6 +485,26 @@ class TestExceptionHandlers(TestCase):
         recommendation = RecommendationFactory()
         self.assertRaises(DataValidationError, recommendation.delete)
 
+    def test_apply_custom_discounts_database_error(self):
+        """It should wrap database commit errors in DataValidationError"""
+        r = RecommendationFactory(
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        r.create()
+
+        mappings = {str(r.id): {"base_product_price": 10}}
+
+        with patch(
+            "service.models.db.session.commit",
+            side_effect=Exception("boom"),
+        ) as mock_commit:
+            with self.assertRaises(DataValidationError) as context:
+                Recommendation.apply_custom_discounts(mappings)
+
+        self.assertIn("Database error", str(context.exception))
+        mock_commit.assert_called()
+
     def test_apply_flat_discount_to_accessories_success(self):
         """It should apply flat discount to accessories successfully"""
         # Create accessory recommendations
@@ -663,3 +684,82 @@ class TestExceptionHandlers(TestCase):
 
         updated_ids = Recommendation.apply_custom_discounts(discount_mappings)
         self.assertEqual(updated_ids, [])  # No updates since prices are null
+
+    ######################################################################
+    #  H E L P E R   M E T H O D S   F O R   D I S C O U N T S
+    ######################################################################
+
+    def test_validate_discount_percentage_valid_values(self):
+        """_validate_discount_percentage: should accept values strictly between 0 and 100"""
+        pct = Recommendation._validate_discount_percentage(10)  # type: ignore[attr-defined]
+        self.assertEqual(pct, Decimal("10"))
+
+        pct = Recommendation._validate_discount_percentage("25.5")  # type: ignore[attr-defined]
+        self.assertEqual(pct, Decimal("25.5"))
+
+    def test_validate_discount_percentage_invalid_type_or_range(self):
+        """_validate_discount_percentage: should raise DataValidationError on bad input"""
+        # non-numeric
+        with self.assertRaises(DataValidationError) as ctx:
+            Recommendation._validate_discount_percentage("abc")  # type: ignore[attr-defined]
+        self.assertIn("Discount must be between 0 and 100", str(ctx.exception))
+
+        # zero
+        with self.assertRaises(DataValidationError):
+            Recommendation._validate_discount_percentage(0)  # type: ignore[attr-defined]
+
+        # negative
+        with self.assertRaises(DataValidationError):
+            Recommendation._validate_discount_percentage(-5)  # type: ignore[attr-defined]
+
+        # >= 100
+        with self.assertRaises(DataValidationError):
+            Recommendation._validate_discount_percentage(100)  # type: ignore[attr-defined]
+
+    def test_apply_discount_helper_calculates_and_rounds(self):
+        """_apply_discount: should compute correct discounted price with 2-decimal rounding"""
+        value = Decimal("100.00")
+        percent = Decimal("7.5")  # 7.5% off -> 92.50
+
+        discounted = Recommendation._apply_discount(value, percent)  # type: ignore[attr-defined]
+        self.assertEqual(discounted, Decimal("92.50"))
+
+        # check rounding behavior (e.g., 1/3 with 10% off)
+        value = Decimal("10.005")
+        percent = Decimal("0.5")  # 0.5% off
+        discounted = Recommendation._apply_discount(value, percent)  # type: ignore[attr-defined]
+        # 10.005 * 0.995 = 9.954975 -> 9.95 with ROUND_HALF_UP
+        self.assertEqual(discounted, Decimal("9.95"))
+
+    ######################################################################
+    #  A P P L Y   F L A T   D I S C O U N T   (M O D E L)
+    ######################################################################
+
+    def test_apply_flat_discount_to_accessories_no_accessories(self):
+        """apply_flat_discount_to_accessories: should raise ResourceNotFoundError when no accessories"""
+        # ensure table empty or only non-accessory rows
+        db.session.query(Recommendation).delete()
+        db.session.commit()
+
+        non_acc = RecommendationFactory(recommendation_type="cross-sell")
+        non_acc.create()
+
+        with self.assertRaises(ResourceNotFoundError) as ctx:
+            Recommendation.apply_flat_discount_to_accessories(Decimal("10"))
+        self.assertIn("No matching accessory recommendations found", str(ctx.exception))
+
+    def test_apply_flat_discount_to_accessories_only_null_prices(self):
+        """apply_flat_discount_to_accessories: should raise ResourceNotFoundError when all prices are null"""
+        db.session.query(Recommendation).delete()
+        db.session.commit()
+
+        acc1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=None,
+            recommended_product_price=None,
+        )
+        acc1.create()
+
+        with self.assertRaises(ResourceNotFoundError) as ctx:
+            Recommendation.apply_flat_discount_to_accessories(Decimal("10"))
+        self.assertIn("No matching accessory recommendations found", str(ctx.exception))
