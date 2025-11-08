@@ -441,9 +441,21 @@ class TestYourResourceService(TestCase):
     def test_apply_flat_discount_accessories(self):
         """It should apply a flat discount to all accessory recommendations"""
         # create some data: accessories and non-accessories
-        a1 = RecommendationFactory(recommendation_type="accessory", base_product_price=Decimal("100.00"), recommended_product_price=Decimal("50.00"))
-        a2 = RecommendationFactory(recommendation_type="accessory", base_product_price=Decimal("20.00"), recommended_product_price=Decimal("10.00"))
-        b1 = RecommendationFactory(recommendation_type="cross-sell", base_product_price=Decimal("100.00"), recommended_product_price=Decimal("50.00"))
+        a1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        a2 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("20.00"),
+            recommended_product_price=Decimal("10.00"),
+        )
+        b1 = RecommendationFactory(
+            recommendation_type="cross-sell",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
         a1.create()
         a2.create()
         b1.create()
@@ -476,9 +488,18 @@ class TestYourResourceService(TestCase):
 
     def test_apply_custom_discounts_per_id(self):
         """It should apply custom per-recommendation discounts via JSON body"""
-        r1 = RecommendationFactory(base_product_price=Decimal("200.00"), recommended_product_price=Decimal("20.00"))
-        r2 = RecommendationFactory(base_product_price=Decimal("100.00"), recommended_product_price=Decimal("10.00"))
-        r3 = RecommendationFactory(base_product_price=Decimal("300.00"), recommended_product_price=Decimal("30.00"))
+        r1 = RecommendationFactory(
+            base_product_price=Decimal("200.00"),
+            recommended_product_price=Decimal("20.00"),
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("10.00"),
+        )
+        r3 = RecommendationFactory(
+            base_product_price=Decimal("300.00"),
+            recommended_product_price=Decimal("30.00"),
+        )
         r1.create()
         r2.create()
         r3.create()
@@ -511,8 +532,12 @@ class TestYourResourceService(TestCase):
         assert got3.recommended_product_price == Decimal("30.00")
 
         # updated_date refreshed on changed records
-        assert got1.updated_date is not None and (before1 is None or got1.updated_date >= before1)
-        assert got2.updated_date is not None and (before2 is None or got2.updated_date >= before2)
+        assert got1.updated_date is not None and (
+            before1 is None or got1.updated_date >= before1
+        )
+        assert got2.updated_date is not None and (
+            before2 is None or got2.updated_date >= before2
+        )
 
     def test_apply_discount_invalid_values(self):
         """It should return 400 on invalid discount values"""
@@ -541,7 +566,11 @@ class TestYourResourceService(TestCase):
     def test_apply_flat_discount_no_matches_returns_404(self):
         """It should return 404 when no accessory recommendations exist or none updatable"""
         # create only non-accessory records
-        x = RecommendationFactory(recommendation_type="cross-sell", base_product_price=Decimal("10.00"), recommended_product_price=Decimal("5.00"))
+        x = RecommendationFactory(
+            recommendation_type="cross-sell",
+            base_product_price=Decimal("10.00"),
+            recommended_product_price=Decimal("5.00"),
+        )
         x.create()
         resp = self.client.put(f"{DISCOUNT_URL}?discount=10")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
@@ -549,9 +578,21 @@ class TestYourResourceService(TestCase):
     def test_apply_flat_discount_accessories_with_null_prices(self):
         """It should handle accessory recommendations with null prices correctly"""
         # Create accessories with null prices
-        a1 = RecommendationFactory(recommendation_type="accessory", base_product_price=None, recommended_product_price=Decimal("50.00"))
-        a2 = RecommendationFactory(recommendation_type="accessory", base_product_price=Decimal("100.00"), recommended_product_price=None)
-        a3 = RecommendationFactory(recommendation_type="accessory", base_product_price=None, recommended_product_price=None)
+        a1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=None,
+            recommended_product_price=Decimal("50.00"),
+        )
+        a2 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=None,
+        )
+        a3 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=None,
+            recommended_product_price=None,
+        )
         a1.create()
         a2.create()
         a3.create()
@@ -580,12 +621,23 @@ class TestYourResourceService(TestCase):
     def test_apply_custom_discounts_invalid_json_structure(self):
         """It should return 400 for invalid JSON structure in custom mode"""
         # Empty JSON body with content type
-        resp = self.client.put(DISCOUNT_URL, json={}, content_type="application/json")
+        resp = self.client.put(
+            DISCOUNT_URL,
+            json={},
+            content_type="application/json",
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "JSON body must map recommendation_id to discount objects" in resp.get_json().get("message", "")
+        assert (
+            "JSON body must map recommendation_id to discount objects"
+            in resp.get_json().get("message", "")
+        )
 
         # Non-dict JSON body
-        resp = self.client.put(DISCOUNT_URL, json="invalid", content_type="application/json")
+        resp = self.client.put(
+            DISCOUNT_URL,
+            json="invalid",
+            content_type="application/json",
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_apply_custom_discounts_invalid_recommendation_id_keys(self):
@@ -593,7 +645,9 @@ class TestYourResourceService(TestCase):
         body = {"invalid_id": {"base_product_price": 10}}
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Keys must be numeric recommendation IDs" in resp.get_json().get("message", "")
+        assert "Keys must be numeric recommendation IDs" in resp.get_json().get(
+            "message", ""
+        )
 
     def test_apply_custom_discounts_invalid_discount_config(self):
         """It should return 400 for invalid discount configuration objects"""
@@ -604,13 +658,19 @@ class TestYourResourceService(TestCase):
         body = {str(r.id): "invalid"}
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Each value must be an object with price discount fields" in resp.get_json().get("message", "")
+        assert (
+            "Each value must be an object with price discount fields"
+            in resp.get_json().get("message", "")
+        )
 
         # Empty discount config
         body = {str(r.id): {}}
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Each value must be an object with price discount fields" in resp.get_json().get("message", "")
+        assert (
+            "Each value must be an object with price discount fields"
+            in resp.get_json().get("message", "")
+        )
 
     def test_apply_custom_discounts_no_discount_fields(self):
         """It should return 400 when no discount fields are provided"""
@@ -620,13 +680,16 @@ class TestYourResourceService(TestCase):
         body = {str(r.id): {"invalid_field": 10}}
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Provide at least one of base_product_price or recommended_product_price" in resp.get_json().get("message", "")
+        assert (
+            "Provide at least one of base_product_price or recommended_product_price"
+            in resp.get_json().get("message", "")
+        )
 
     def test_apply_custom_discounts_nonexistent_recommendation_ids(self):
         """It should skip non-existent recommendation IDs without error"""
         body = {
             "99999": {"base_product_price": 10},  # Non-existent ID
-            "99998": {"recommended_product_price": 20}  # Non-existent ID
+            "99998": {"recommended_product_price": 20},  # Non-existent ID
         }
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_200_OK
@@ -640,22 +703,32 @@ class TestYourResourceService(TestCase):
 
         body = {
             str(r1.id): {"base_product_price": 10},  # Valid ID
-            "99999": {"base_product_price": 20},     # Invalid ID
-            "invalid": {"base_product_price": 30}    # Invalid key
+            "99999": {"base_product_price": 20},  # Invalid ID
+            "invalid": {"base_product_price": 30},  # Invalid key
         }
         resp = self.client.put(DISCOUNT_URL, json=body)
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST  # Should fail due to invalid key
+        assert (
+            resp.status_code == status.HTTP_400_BAD_REQUEST
+        )  # Should fail due to invalid key
 
     def test_apply_custom_discounts_with_null_prices(self):
         """It should handle recommendations with null prices in custom mode"""
-        r1 = RecommendationFactory(base_product_price=None, recommended_product_price=Decimal("50.00"))
-        r2 = RecommendationFactory(base_product_price=Decimal("100.00"), recommended_product_price=None)
+        r1 = RecommendationFactory(
+            base_product_price=None, recommended_product_price=Decimal("50.00")
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("100.00"), recommended_product_price=None
+        )
         r1.create()
         r2.create()
 
         body = {
-            str(r1.id): {"base_product_price": 20},  # Should be skipped (base_price is null)
-            str(r2.id): {"recommended_product_price": 30}  # Should be skipped (rec_price is null)
+            str(r1.id): {
+                "base_product_price": 20
+            },  # Should be skipped (base_price is null)
+            str(r2.id): {
+                "recommended_product_price": 30
+            },  # Should be skipped (rec_price is null)
         }
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_200_OK
@@ -666,7 +739,9 @@ class TestYourResourceService(TestCase):
         """It should return 400 for invalid discount percentage strings"""
         resp = self.client.put(f"{DISCOUNT_URL}?discount=invalid")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Discount must be between 0 and 100" in resp.get_json().get("message", "")
+        assert "Discount must be between 0 and 100" in resp.get_json().get(
+            "message", ""
+        )
 
     def test_apply_discount_edge_case_discount_values(self):
         """It should handle edge case discount values correctly"""
@@ -697,7 +772,9 @@ class TestYourResourceService(TestCase):
         body = {str(r.id): {"base_product_price": 150}}  # Invalid percentage
         resp = self.client.put(DISCOUNT_URL, json=body)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Discount must be between 0 and 100" in resp.get_json().get("message", "")
+        assert "Discount must be between 0 and 100" in resp.get_json().get(
+            "message", ""
+        )
 
     def test_apply_discount_content_type_handling(self):
         """It should handle content type correctly for custom mode"""

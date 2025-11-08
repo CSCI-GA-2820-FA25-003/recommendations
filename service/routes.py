@@ -20,18 +20,17 @@ Recommendation Service
 This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
+from decimal import Decimal, InvalidOperation
 
 from flask import jsonify, request, abort, url_for
 from flask import current_app as app  # Import Flask application
+
+from service.common import status  # HTTP Status Codes
 from service.models import (
     DataValidationError,
     ResourceNotFoundError,
     Recommendation,
-    db,
 )
-from service.common import status  # HTTP Status Codes
-from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, timezone
 
 
 ######################################################################
@@ -339,8 +338,9 @@ def validate_discount_percent(value) -> Decimal:
     """Validates that discount percentage is between 0 and 100 (exclusive)"""
     try:
         pct = Decimal(str(value))
-    except Exception:  # noqa: BLE001
+    except (InvalidOperation, ValueError, TypeError):
         abort(status.HTTP_400_BAD_REQUEST, "Discount must be between 0 and 100")
+
     if pct <= Decimal("0") or pct >= Decimal("100"):
         abort(status.HTTP_400_BAD_REQUEST, "Discount must be between 0 and 100")
     return pct

@@ -27,7 +27,6 @@ from unittest.mock import patch
 from wsgi import app
 from service.models import (
     DataValidationError,
-    ResourceNotFoundError,
     Recommendation,
     db,
 )
