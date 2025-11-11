@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
 
-from flask import jsonify, request, abort
+from flask import jsonify, request, abort, url_for
 from flask import current_app as app  # Import Flask application
 from service.models import DataValidationError, Recommendation
 from service.common import status  # HTTP Status Codes
@@ -83,11 +83,9 @@ def create_recommendations():
     app.logger.info("Recommendation with new id [%s] saved!", recommendation.id)
 
     # Return the location of the new Recommendation
-    # Todo: uncomment this code when get_recommendations is implemented
-    # location_url = url_for(
-    #     "get_recommendations", recommendation_id=recommendation.id, _external=True
-    # )
-    location_url = "unknown"
+    location_url = url_for(
+        "get_recommendations", recommendation_id=recommendation.id, _external=True
+    )
 
     return (
         jsonify(recommendation.serialize()),
@@ -96,8 +94,8 @@ def create_recommendations():
     )
 
 
-######################################################################
-# UPDATE AN EXISTING PET
+#####################################################################
+# UPDATE AN EXISTING RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["PUT"])
 def update_recommendation(recommendation_id: int):
@@ -140,6 +138,7 @@ def update_recommendation(recommendation_id: int):
     return jsonify(rec.serialize()), status.HTTP_200_OK
 
 
+#####################################################################
 # DELETE A RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
@@ -163,6 +162,7 @@ def delete_recommendations(recommendation_id):
     return {}, status.HTTP_204_NO_CONTENT
 
 
+#####################################################################
 # READ A Recommendation
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
@@ -186,6 +186,60 @@ def get_recommendations(recommendation_id):
 
     app.logger.info("Returning recommendation: %s", recommendation.id)
     return jsonify(recommendation.serialize()), status.HTTP_200_OK
+
+
+######################################################################
+# LIST RECOMMENDATIONS - Multiple Filters
+######################################################################
+@app.route("/recommendations", methods=["GET"])
+def list_recommendations():
+    """Returns recommendations
+    Supported query params (all optional, and can be combined):
+      - base_product_id: int
+      - recommendation_type: "cross-sell", "up-sell", "accessory" (case-insensitive)
+      - status: "active", "inactive" (case-insensitive)
+      - confidence_score: float in [0, 1]  (minimum threshold, inclusive)
+    """
+    app.logger.info("Request for recommendation list")
+
+    # Parse args
+    base_product_id = request.args.get("base_product_id", type=int)
+    recommendation_type = request.args.get("recommendation_type", type=str)
+    confidence_score = request.args.get("confidence_score", type=float)
+    rec_status = request.args.get("status", type=str)
+
+    # Validate confidence_score range if provided
+    if confidence_score is not None:
+        if confidence_score < 0 or confidence_score > 1:
+            return (
+                jsonify({"message": "confidence_score must be in [0, 1]"}),
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+    # If no filters at all, return all
+    if (
+        base_product_id is None
+        and not recommendation_type
+        and not rec_status
+        and confidence_score is None
+    ):
+        app.logger.info("Find all")
+        recs = Recommendation.all()
+        results = [r.serialize() for r in recs]
+        app.logger.info("Returning %d recommendations", len(results))
+        return jsonify(results), status.HTTP_200_OK
+
+    # combined filters (AND)
+    q = Recommendation.filter_many(
+        base_product_id=base_product_id,
+        recommendation_type=recommendation_type,
+        status=rec_status,
+        min_confidence=confidence_score,
+    )
+    rows = q.all()
+    results = [r.serialize() for r in rows]
+    app.logger.info("Returning %d recommendations", len(results))
+    return jsonify(results), status.HTTP_200_OK
 
 
 ######################################################################

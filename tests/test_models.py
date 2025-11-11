@@ -23,6 +23,7 @@ from decimal import Decimal
 import os
 import logging
 from unittest import TestCase
+from unittest.mock import patch
 from wsgi import app
 from service.models import DataValidationError, Recommendation, db
 from .factories import RecommendationFactory
@@ -106,6 +107,7 @@ class TestRecommendation(TestCase):
         # delete the recommendation and make sure it isn't in the database
         recommendation.delete()
         self.assertEqual(len(Recommendation.all()), 0)
+
     # ----------------------------------------------------------
     # TEST READ
     # ----------------------------------------------------------
@@ -151,7 +153,6 @@ class TestRecommendation(TestCase):
         self.assertEqual(found_recommendation.created_date, recommendation.created_date)
         self.assertEqual(found_recommendation.updated_date, recommendation.updated_date)
 
-    # Todo: Add your test cases here...
     def test_update_type_normalizes_and_persists(self):
         """It should update a Recommendation's type and normalize it to lowercase"""
         rec = RecommendationFactory(recommendation_type="cross-sell")
@@ -228,3 +229,253 @@ class TestRecommendation(TestCase):
         rec.create()
         with self.assertRaises(DataValidationError):
             rec.update({"confidence_score": "not-a-number"})
+
+    def test_all_returns_empty_then_populated(self):
+        """It should return [] when empty and all rows when populated"""
+        self.assertEqual(len(Recommendation.all()), 0)
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        a.create()
+        b.create()
+        rows = Recommendation.all()
+        self.assertEqual(len(rows), 2)
+        self.assertCountEqual([a.id, b.id], [r.id for r in rows])
+
+    def test_find_by_base_product_id(self):
+        """It should filter by base_product_id"""
+        r1 = RecommendationFactory(base_product_id=10, recommended_product_id=101)
+        r2 = RecommendationFactory(base_product_id=10, recommended_product_id=102)
+        r3 = RecommendationFactory(base_product_id=11, recommended_product_id=103)
+        r1.create()
+        r2.create()
+        r3.create()
+
+        q = Recommendation.find_by_base_product_id(10)
+        rows = q.all()
+        self.assertEqual(len(rows), 2)
+        self.assertCountEqual([r1.id, r2.id], [r.id for r in rows])
+
+    def test_find_by_recommendation_type_case_insensitive(self):
+        """It should match recommendation_type case-insensitively"""
+        r1 = RecommendationFactory(recommendation_type="cross-sell")
+        r2 = RecommendationFactory(recommendation_type="up-sell")
+        r1.create()
+        r2.create()
+
+        q = Recommendation.find_by_recommendation_type("CROSS-SELL")
+        rows = q.all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].id, r1.id)
+
+    def test_find_by_status_case_insensitive(self):
+        """It should match status case-insensitively"""
+        r_active = RecommendationFactory(status="active")
+        r_inactive = RecommendationFactory(status="inactive")
+        r_active.create()
+        r_inactive.create()
+
+        q = Recommendation.find_by_status("ACTIVE")
+        rows = q.all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].id, r_active.id)
+
+    def test_find_by_min_confidence_is_inclusive(self):
+        """It should include rows with confidence_score >= threshold"""
+        r_low = RecommendationFactory(confidence_score="0.40")
+        r_eq = RecommendationFactory(confidence_score="0.50")
+        r_high = RecommendationFactory(confidence_score="0.90")
+        r_low.create()
+        r_eq.create()
+        r_high.create()
+
+        q = Recommendation.find_by_min_confidence(0.50)
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertIn(r_eq.id, ids)
+        self.assertIn(r_high.id, ids)
+        self.assertNotIn(r_low.id, ids)
+
+    def test_serialize_contains_expected_fields(self):
+        """It should serialize to the expected dict shape/types"""
+        rec = RecommendationFactory(
+            base_product_id=7,
+            recommended_product_id=8,
+            recommendation_type="accessory",
+            status="active",
+            confidence_score="0.65",
+            base_product_price="199.99",
+            recommended_product_price="19.99",
+            base_product_description="Phone",
+            recommended_product_description="Case",
+        )
+        rec.create()
+
+        data = rec.serialize()
+        # ids & basics
+        self.assertEqual(data["recommendation_id"], rec.id)
+        self.assertEqual(data["base_product_id"], 7)
+        self.assertEqual(data["recommended_product_id"], 8)
+        self.assertEqual(data["recommendation_type"], "accessory")
+        self.assertEqual(data["status"], "active")
+        # numeric conversions -> float
+        self.assertIsInstance(data["confidence_score"], float)
+        self.assertAlmostEqual(data["confidence_score"], 0.65, places=6)
+        self.assertAlmostEqual(data["base_product_price"], 199.99, places=6)
+        self.assertAlmostEqual(data["recommended_product_price"], 19.99, places=6)
+        # descriptions
+        self.assertEqual(data["base_product_description"], "Phone")
+        self.assertEqual(data["recommended_product_description"], "Case")
+        # timestamps as ISO strings
+        self.assertIsInstance(data["created_date"], str)
+        self.assertIsInstance(data["updated_date"], str)
+
+    # ----------------------------------------------------------
+    # Additional Test Cases Added Here
+    # ----------------------------------------------------------
+
+    # Test model.py line 62
+    def test_repr(self):
+        """It should have a readable __repr__"""
+        rec = RecommendationFactory(recommendation_type="up-sell")
+        rec.create()
+        repr_str = repr(rec)
+        self.assertIn("Recommendation id=[", repr_str)
+        self.assertIn("type=up-sell", repr_str)
+        self.assertIn(f"base={rec.base_product_id}", repr_str)
+        self.assertIn(f"rec={rec.recommended_product_id}", repr_str)
+
+    # Test model.py line 153, 159
+    def test_helpers_to_decimal_and_to_float(self):
+        """It should convert using _to_decimal/_to_float"""
+        self.assertIsNone(Recommendation._to_decimal(None))
+        self.assertIsNone(Recommendation._to_float(None))
+
+        self.assertEqual(
+            Recommendation._to_decimal("1.23"), Recommendation._to_decimal(1.23)
+        )
+        self.assertAlmostEqual(
+            Recommendation._to_float(Recommendation._to_decimal("0.90")), 0.90, places=6
+        )
+
+    # Test model.py line 229
+    def test_deserialize_type_error_when_none_payload(self):
+        """It should raise DataValidationError when payload is None"""
+        with self.assertRaises(DataValidationError):
+            Recommendation().deserialize(None)
+
+    # Test models.py line 225
+    def test_deserialize_missing_required_field(self):
+        """It should raise DataValidationError when a required field is missing"""
+        payload = {
+            # "base_product_id" missing on purpose
+            "recommended_product_id": 2002,
+            "recommendation_type": "up-sell",
+            "status": "inactive",
+            "confidence_score": "0.30",
+        }
+        rec = Recommendation()
+        with self.assertRaises(DataValidationError):
+            rec.deserialize(payload)
+
+    # ----------------------------------------------------------
+    #  Multiple filters
+    # ----------------------------------------------------------
+    def test_filter_many_status_and_type(self):
+        """filter_many: AND status + recommendation_type, case insensitive"""
+        a = RecommendationFactory(status="active", recommendation_type="up-sell")
+        b = RecommendationFactory(status="active", recommendation_type="cross-sell")
+        c = RecommendationFactory(status="inactive", recommendation_type="up-sell")
+        a.create()
+        b.create()
+        c.create()
+
+        q = Recommendation.filter_many(status="ACTIVE", recommendation_type="UP-SELL")
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertEqual(ids, {a.id})
+
+    def test_filter_many_base_status_confidence(self):
+        """filter_many: base_product_id + status + min_confidence (>=)"""
+        a = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.50")
+        )
+        b = RecommendationFactory(
+            base_product_id=10, status="active", confidence_score=Decimal("0.90")
+        )
+        c = RecommendationFactory(
+            base_product_id=10, status="inactive", confidence_score=Decimal("0.95")
+        )
+        d = RecommendationFactory(
+            base_product_id=11, status="active", confidence_score=Decimal("0.99")
+        )
+        a.create()
+        b.create()
+        c.create()
+        d.create()
+
+        q = Recommendation.filter_many(
+            base_product_id=10,
+            status="ACTIVE",
+            min_confidence=0.75,
+        )
+        rows = q.all()
+        ids = {r.id for r in rows}
+        # only b meet: base=10 & status=active, confidence>=0.75
+        self.assertEqual(ids, {b.id})
+
+    def test_filter_many_min_confidence_inclusive(self):
+        """filter_many: min_confidence should >= (inclusive)"""
+        r_low = RecommendationFactory(confidence_score=Decimal("0.40"))
+        r_eq = RecommendationFactory(confidence_score=Decimal("0.50"))
+        r_hi = RecommendationFactory(confidence_score=Decimal("0.90"))
+        r_low.create()
+        r_eq.create()
+        r_hi.create()
+
+        q = Recommendation.filter_many(min_confidence=0.50)
+        rows = q.all()
+        ids = {r.id for r in rows}
+        self.assertIn(r_eq.id, ids)
+        self.assertIn(r_hi.id, ids)
+        self.assertNotIn(r_low.id, ids)
+
+    def test_filter_many_no_filters_returns_all(self):
+        """filter_many: Recommendation.all() if without any filter"""
+        a = RecommendationFactory()
+        b = RecommendationFactory()
+        a.create()
+        b.create()
+        self.assertCountEqual(
+            [r.id for r in Recommendation.filter_many().all()],
+            [r.id for r in Recommendation.all()],
+        )
+
+
+######################################################################
+#  T E S T   E X C E P T I O N   H A N D L E R S
+######################################################################
+class TestExceptionHandlers(TestCase):
+    """Recommendations Model Exception Handlers"""
+
+    @patch("service.models.db.session.commit")
+    def test_create_exception(self, exception_mock):
+        """It should catch a create exception"""
+        exception_mock.side_effect = Exception()
+        recommendation = RecommendationFactory()
+        self.assertRaises(DataValidationError, recommendation.create)
+
+    def test_update_exception(self):
+        """It should catch an update exception"""
+        recommendation = RecommendationFactory(status="active", confidence_score="0.5")
+        recommendation.create()
+
+        with patch("service.models.db.session.commit", side_effect=Exception("boom")):
+            with self.assertRaises(DataValidationError):
+                recommendation.update({"status": "active"})
+
+    @patch("service.models.db.session.commit")
+    def test_delete_exception(self, exception_mock):
+        """It should catch a delete exception"""
+        exception_mock.side_effect = Exception()
+        recommendation = RecommendationFactory()
+        self.assertRaises(DataValidationError, recommendation.delete)

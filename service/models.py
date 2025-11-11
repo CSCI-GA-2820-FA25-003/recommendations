@@ -5,8 +5,9 @@ All of the models are stored in this module
 """
 
 import logging
-from decimal import Decimal
 from datetime import datetime, timezone
+from typing import Any, Mapping
+from decimal import Decimal, InvalidOperation
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Enum as SAEnum
@@ -25,8 +26,11 @@ class DataValidationError(Exception):
 REC_TYPE_ENUM = SAEnum("cross-sell", "up-sell", "accessory", name="rec_type")
 STATUS_ENUM = SAEnum("active", "inactive", name="rec_status")
 
+REC_TYPE_VALUES = {"cross-sell", "up-sell", "accessory"}
+STATUS_VALUES = {"active", "inactive"}
 
-class Recommendation(db.Model):
+
+class Recommendation(db.Model):  # pylint: disable=too-many-instance-attributes
     """
     Class that represents a Recommendation
     """
@@ -84,49 +88,68 @@ class Recommendation(db.Model):
             logger.error("Error creating record: %s", self)
             raise DataValidationError(e) from e
 
-    def update(self, data: dict | None = None) -> None:
-        """
-        Update this Recommendation (optionally applying partial fields) and commit.
-
-        Allowed updatable fields (for now):
-          - recommendation_type  (normalized to lowercase)
-          - confidence_score     (numeric in [0, 1])
-          - status              (normalized to lowercase)
-
-        Raises:
-          DataValidationError on invalid payload/values or DB error.
-        """
+    # -------------- Helpers for update -------------
+    def _require_persisted(self) -> None:
         if not self.id:
             raise DataValidationError("Update called with empty ID field")
 
-        if data:
-            if "recommendation_type" in data:
-                rt = str(data.get("recommendation_type")).strip().lower()
-                if not rt:
-                    raise DataValidationError("recommendation_type is required")
-                self.recommendation_type = rt
-            if "status" in data:
-                status = str(data.get("status")).strip().lower()
-                if not status:
-                    raise DataValidationError("status is required")
-                self.status = status
+    @staticmethod
+    def _normalize_required_str(value: Any, field: str) -> str:
+        s = str(value).strip().lower()
+        if not s:
+            raise DataValidationError(f"{field} is required")
+        return s
 
-            if "confidence_score" in data:
-                try:
-                    cs = Decimal(str(data.get("confidence_score")))
-                except Exception as e:
-                    raise DataValidationError("confidence_score must be numeric") from e
-                if cs < Decimal("0") or cs > Decimal("1"):
-                    raise DataValidationError("confidence_score must be in [0, 1]")
-                self.confidence_score = cs
+    def _set_enum(self, field: str, value: Any, allowed: set[str]) -> None:
+        s = self._normalize_required_str(value, field)
+        if s not in allowed:
+            raise DataValidationError(f"{field} must be one of {sorted(allowed)}")
+        setattr(self, field, s)
 
-        self.updated_date = datetime.now(timezone.utc)
+    def _set_confidence_score(self, value: Any) -> None:
+        try:
+            cs = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise DataValidationError("confidence_score must be numeric") from exc
+        if cs < Decimal("0") or cs > Decimal("1"):
+            raise DataValidationError("confidence_score must be in [0, 1]")
+        self.confidence_score = cs
+
+    def _commit_or_raise(self) -> None:
         try:
             db.session.commit()
-        except Exception as e:
+        except Exception as exc:  # noqa: BLE001
             db.session.rollback()
-            logger.error("Error updating record id=%s: %s", self.id, e)
-            raise DataValidationError(e) from e
+            logger.error("Error updating record id=%s: %s", self.id, exc)
+            raise DataValidationError(exc) from exc
+
+    def update(self, data: Mapping[str, Any] | None = None) -> None:
+        """
+        Update this Recommendation (optionally applying partial fields) and commit.
+        Allowed updatable fields:
+          - recommendation_type  (lowercase enum)
+          - status               (lowercase enum)
+          - confidence_score     (numeric in [0, 1])
+        """
+        self._require_persisted()
+        if not data:
+            return
+
+        handlers = {
+            "recommendation_type": lambda v: self._set_enum(
+                "recommendation_type", v, REC_TYPE_VALUES
+            ),
+            "status": lambda v: self._set_enum("status", v, STATUS_VALUES),
+            "confidence_score": self._set_confidence_score,
+        }
+
+        for key, val in data.items():
+            if key not in handlers:
+                raise DataValidationError(f"Unknown field: {key}")
+            handlers[key](val)
+
+        self.updated_date = datetime.now(timezone.utc)
+        self._commit_or_raise()
 
     def delete(self):
         """Removes a Recommendation from the data store"""
@@ -249,11 +272,58 @@ class Recommendation(db.Model):
         return cls.query.session.get(cls, by_id)
 
     @classmethod
-    def find_by_base_product_id(cls, base_product_id):
-        """Returns all Recommendations with the given base product id
-
-        Args:
-            base_product_id (int): the base product id of the Recommendations you want to match
-        """
+    def find_by_base_product_id(cls, base_product_id: int):
+        """Returns all Recommendations with the given base product id"""
         logger.info("Processing base_product_id query for %s ...", base_product_id)
         return cls.query.filter(cls.base_product_id == base_product_id)
+
+    @classmethod
+    def find_by_recommendation_type(cls, rec_type: str):
+        """Returns all Recommendations with the given recommendation type"""
+        norm = rec_type.strip().lower()
+        return cls.query.filter(cls.recommendation_type == norm)
+
+    @classmethod
+    def find_by_status(cls, status: str):
+        """Returns all Recommendations with the given product availability status"""
+        norm = status.strip().lower()
+        return cls.query.filter(cls.status == norm)
+
+    @classmethod
+    def find_by_min_confidence(cls, threshold: float):
+        """Returns all Recommendations with confidence_score >= threshold"""
+        logger.info("Processing confidence_score >= %s query ...", threshold)
+        return cls.query.filter(cls.confidence_score >= threshold)
+
+    # ----------------------------------------------------------
+    #  Multiple Filters
+    # ----------------------------------------------------------
+    @classmethod
+    def filter_many(
+        cls,
+        *,
+        base_product_id: int | None = None,
+        recommendation_type: str | None = None,
+        status: str | None = None,
+        min_confidence: float | None = None,
+    ):
+        """
+        Returns a query with all provided filters "AND" together.
+        String inputs are set to lowercase
+        min_confidence is inclusive (>=)
+        """
+        q = cls.query
+
+        if base_product_id is not None:
+            q = q.filter(cls.base_product_id == base_product_id)
+
+        if recommendation_type:
+            q = q.filter(cls.recommendation_type == recommendation_type.strip().lower())
+
+        if status:
+            q = q.filter(cls.status == status.strip().lower())
+
+        if min_confidence is not None:
+            q = q.filter(cls.confidence_score >= min_confidence)
+
+        return q
