@@ -40,10 +40,19 @@ def index():
             version="1.0",
             message="Welcome to the Recommendation Service! See docs at /apidocs.",
             docs="/apidocs",
-            list_url="/recommendations"
+            list_url="/recommendations",
         ),
         status.HTTP_200_OK,
     )
+
+
+######################################################################
+# SERVE STATIC UI
+######################################################################
+@app.route("/ui")
+def serve_ui():
+    """Serves the static admin UI page"""
+    return app.send_static_file("index.html")
 
 
 ######################################################################
@@ -129,6 +138,8 @@ def update_recommendation(recommendation_id: int):
         return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
 
     return jsonify(rec.serialize()), status.HTTP_200_OK
+
+
 # DELETE A RECOMMENDATION
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
@@ -150,6 +161,8 @@ def delete_recommendations(recommendation_id):
 
     app.logger.info("Recommendation with ID: %d delete complete.", recommendation_id)
     return {}, status.HTTP_204_NO_CONTENT
+
+
 # READ A Recommendation
 ######################################################################
 @app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
