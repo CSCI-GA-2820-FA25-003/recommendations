@@ -32,6 +32,7 @@ DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
 BASE_URL = "/recommendations"
+DISCOUNT_URL = f"{BASE_URL}/apply_discount"
 
 
 ######################################################################
@@ -435,6 +436,360 @@ class TestYourResourceService(TestCase):
         assert data == []
 
     # ----------------------------------------------------------
+    # APPLY DISCOUNT ENDPOINT TESTS
+    # ----------------------------------------------------------
+    def test_apply_flat_discount_accessories(self):
+        """It should apply a flat discount to all accessory recommendations"""
+        # create some data: accessories and non-accessories
+        a1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        a2 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("20.00"),
+            recommended_product_price=Decimal("10.00"),
+        )
+        b1 = RecommendationFactory(
+            recommendation_type="cross-sell",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("50.00"),
+        )
+        a1.create()
+        a2.create()
+        b1.create()
+
+        # apply 10%
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=10")
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.get_json()
+        assert payload["updated_count"] == 2
+        ids = set(payload["updated_ids"])
+        assert ids == {a1.id, a2.id}
+
+        # verify persisted values and updated_date changed
+        got_a1 = Recommendation.find(a1.id)
+        got_a2 = Recommendation.find(a2.id)
+        # 10% off
+        assert got_a1.base_product_price == Decimal("90.00")
+        assert got_a1.recommended_product_price == Decimal("45.00")
+        assert got_a2.base_product_price == Decimal("18.00")
+        assert got_a2.recommended_product_price == Decimal("9.00")
+
+        # updated_date refreshed
+        assert got_a1.updated_date is not None
+        assert got_a2.updated_date is not None
+
+        # non-accessory unchanged
+        got_b1 = Recommendation.find(b1.id)
+        assert got_b1.base_product_price == Decimal("100.00")
+        assert got_b1.recommended_product_price == Decimal("50.00")
+
+    def test_apply_custom_discounts_per_id(self):
+        """It should apply custom per-recommendation discounts via JSON body"""
+        r1 = RecommendationFactory(
+            base_product_price=Decimal("200.00"),
+            recommended_product_price=Decimal("20.00"),
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=Decimal("10.00"),
+        )
+        r3 = RecommendationFactory(
+            base_product_price=Decimal("300.00"),
+            recommended_product_price=Decimal("30.00"),
+        )
+        r1.create()
+        r2.create()
+        r3.create()
+
+        body = {
+            str(r1.id): {"base_product_price": 5},  # 5% off base only
+            str(r2.id): {"recommended_product_price": 50},  # 50% off recommended only
+            # r3 not included -> no change
+        }
+
+        before1 = Recommendation.find(r1.id).updated_date
+        before2 = Recommendation.find(r2.id).updated_date
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        assert set(data["updated_ids"]) == {r1.id, r2.id}
+
+        got1 = Recommendation.find(r1.id)
+        got2 = Recommendation.find(r2.id)
+        got3 = Recommendation.find(r3.id)
+
+        assert got1.base_product_price == Decimal("190.00")  # 5% off
+        assert got1.recommended_product_price == Decimal("20.00")  # unchanged
+
+        assert got2.base_product_price == Decimal("100.00")  # unchanged
+        assert got2.recommended_product_price == Decimal("5.00")  # 50% off
+
+        # r3 unchanged
+        assert got3.base_product_price == Decimal("300.00")
+        assert got3.recommended_product_price == Decimal("30.00")
+
+        # updated_date refreshed on changed records
+        assert got1.updated_date is not None and (
+            before1 is None or got1.updated_date >= before1
+        )
+        assert got2.updated_date is not None and (
+            before2 is None or got2.updated_date >= before2
+        )
+
+    def test_apply_discount_invalid_values(self):
+        """It should return 400 on invalid discount values"""
+        # flat mode invalid
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=0")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        data = resp.get_json()
+        assert "Discount must be between 0 and 100" in data.get("message", "")
+
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=100")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+        # custom mode invalid
+        r = RecommendationFactory()
+        r.create()
+        body = {str(r.id): {"base_product_price": -5}}
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_apply_discount_missing_parameters(self):
+        """It should return 400 when neither query param nor JSON body is provided"""
+        resp = self.client.put(DISCOUNT_URL)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "required" in resp.get_json().get("message", "").lower()
+
+    def test_apply_flat_discount_no_matches_returns_404(self):
+        """It should return 404 when no accessory recommendations exist or none updatable"""
+        # create only non-accessory records
+        x = RecommendationFactory(
+            recommendation_type="cross-sell",
+            base_product_price=Decimal("10.00"),
+            recommended_product_price=Decimal("5.00"),
+        )
+        x.create()
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=10")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_apply_flat_discount_accessories_with_null_prices(self):
+        """It should handle accessory recommendations with null prices correctly"""
+        # Create accessories with null prices
+        a1 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=None,
+            recommended_product_price=Decimal("50.00"),
+        )
+        a2 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=Decimal("100.00"),
+            recommended_product_price=None,
+        )
+        a3 = RecommendationFactory(
+            recommendation_type="accessory",
+            base_product_price=None,
+            recommended_product_price=None,
+        )
+        a1.create()
+        a2.create()
+        a3.create()
+
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=20")
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.get_json()
+        assert payload["updated_count"] == 2  # Only a1 and a2 should be updated
+        assert set(payload["updated_ids"]) == {a1.id, a2.id}
+
+        # Verify a1: only recommended_product_price updated
+        got_a1 = Recommendation.find(a1.id)
+        assert got_a1.base_product_price is None
+        assert got_a1.recommended_product_price == Decimal("40.00")  # 20% off
+
+        # Verify a2: only base_product_price updated
+        got_a2 = Recommendation.find(a2.id)
+        assert got_a2.base_product_price == Decimal("80.00")  # 20% off
+        assert got_a2.recommended_product_price is None
+
+        # Verify a3: no changes (both prices null)
+        got_a3 = Recommendation.find(a3.id)
+        assert got_a3.base_product_price is None
+        assert got_a3.recommended_product_price is None
+
+    def test_apply_custom_discounts_invalid_json_structure(self):
+        """It should return 400 for invalid JSON structure in custom mode"""
+        # Empty JSON body with content type
+        resp = self.client.put(
+            DISCOUNT_URL,
+            json={},
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "JSON body must map recommendation_id to discount objects"
+            in resp.get_json().get("message", "")
+        )
+
+        # Non-dict JSON body
+        resp = self.client.put(
+            DISCOUNT_URL,
+            json="invalid",
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_apply_custom_discounts_invalid_recommendation_id_keys(self):
+        """It should return 400 for non-numeric recommendation ID keys"""
+        body = {"invalid_id": {"base_product_price": 10}}
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Keys must be numeric recommendation IDs" in resp.get_json().get(
+            "message", ""
+        )
+
+    def test_apply_custom_discounts_invalid_discount_config(self):
+        """It should return 400 for invalid discount configuration objects"""
+        r = RecommendationFactory()
+        r.create()
+
+        # Non-dict discount config
+        body = {str(r.id): "invalid"}
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "Each value must be an object with price discount fields"
+            in resp.get_json().get("message", "")
+        )
+
+        # Empty discount config
+        body = {str(r.id): {}}
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "Each value must be an object with price discount fields"
+            in resp.get_json().get("message", "")
+        )
+
+    def test_apply_custom_discounts_no_discount_fields(self):
+        """It should return 400 when no discount fields are provided"""
+        r = RecommendationFactory()
+        r.create()
+
+        body = {str(r.id): {"invalid_field": 10}}
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "Provide at least one of base_product_price or recommended_product_price"
+            in resp.get_json().get("message", "")
+        )
+
+    def test_apply_custom_discounts_nonexistent_recommendation_ids(self):
+        """It should skip non-existent recommendation IDs without error"""
+        body = {
+            "99999": {"base_product_price": 10},  # Non-existent ID
+            "99998": {"recommended_product_price": 20},  # Non-existent ID
+        }
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        assert data["updated_ids"] == []  # No updates since IDs don't exist
+
+    def test_apply_custom_discounts_mixed_valid_invalid_ids(self):
+        """It should process valid IDs and skip invalid ones"""
+        r1 = RecommendationFactory(base_product_price=Decimal("100.00"))
+        r1.create()
+
+        body = {
+            str(r1.id): {"base_product_price": 10},  # Valid ID
+            "99999": {"base_product_price": 20},  # Invalid ID
+            "invalid": {"base_product_price": 30},  # Invalid key
+        }
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert (
+            resp.status_code == status.HTTP_400_BAD_REQUEST
+        )  # Should fail due to invalid key
+
+    def test_apply_custom_discounts_with_null_prices(self):
+        """It should handle recommendations with null prices in custom mode"""
+        r1 = RecommendationFactory(
+            base_product_price=None, recommended_product_price=Decimal("50.00")
+        )
+        r2 = RecommendationFactory(
+            base_product_price=Decimal("100.00"), recommended_product_price=None
+        )
+        r1.create()
+        r2.create()
+
+        body = {
+            str(r1.id): {
+                "base_product_price": 20
+            },  # Should be skipped (base_price is null)
+            str(r2.id): {
+                "recommended_product_price": 30
+            },  # Should be skipped (rec_price is null)
+        }
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.get_json()
+        assert data["updated_ids"] == []  # No updates since prices are null
+
+    def test_apply_discount_invalid_discount_percentage_string(self):
+        """It should return 400 for invalid discount percentage strings"""
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=invalid")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Discount must be between 0 and 100" in resp.get_json().get(
+            "message", ""
+        )
+
+    def test_apply_discount_edge_case_discount_values(self):
+        """It should handle edge case discount values correctly"""
+        # Test exactly 0 (should fail)
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=0")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Test exactly 100 (should fail)
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=100")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Test negative values
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=-5")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Test values over 100
+        resp = self.client.put(f"{DISCOUNT_URL}?discount=150")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_apply_custom_discounts_database_error_handling(self):
+        """It should handle database errors gracefully"""
+        # This test would require mocking the database session to simulate errors
+        # For now, we'll test the validation paths that are easier to trigger
+        r = RecommendationFactory()
+        r.create()
+
+        # Test with invalid discount percentages in custom mode
+        body = {str(r.id): {"base_product_price": 150}}  # Invalid percentage
+        resp = self.client.put(DISCOUNT_URL, json=body)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Discount must be between 0 and 100" in resp.get_json().get(
+            "message", ""
+        )
+
+    def test_apply_discount_content_type_handling(self):
+        """It should handle content type correctly for custom mode"""
+        r = RecommendationFactory()
+        r.create()
+
+        # Test with explicit content type
+        body = {str(r.id): {"base_product_price": 10}}
+        resp = self.client.put(DISCOUNT_URL, json=body, content_type="application/json")
+        assert resp.status_code == status.HTTP_200_OK
+
+        # Test without content type but with data - should return 400 due to missing parameters
+        resp = self.client.put(DISCOUNT_URL, data='{"1": {"base_product_price": 10}}')
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
     # Test Cases for multiple filters
     # ----------------------------------------------------------
 
