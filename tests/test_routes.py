@@ -873,7 +873,7 @@ class TestYourResourceService(TestCase):
         self.assertIn(b"Recommendation REST API Service", response.data)
         # should be HTML content
         self.assertIn("text/html", response.content_type)
-        
+
     # TEST HEALTH ENDPOINT
     # ----------------------------------------------------------
     def test_health_endpoint(self):
