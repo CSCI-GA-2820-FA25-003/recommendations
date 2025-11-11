@@ -864,6 +864,16 @@ class TestYourResourceService(TestCase):
         assert resp.get_json() == []
 
     # ----------------------------------------------------------
+    # TEST UI
+    # ----------------------------------------------------------
+    def test_serve_ui(self):
+        """It should serve the UI page from /ui"""
+        response = self.client.get("/ui")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(b"Recommendation REST API Service", response.data)
+        # should be HTML content
+        self.assertIn("text/html", response.content_type)
+
     # TEST HEALTH ENDPOINT
     # ----------------------------------------------------------
     def test_health_endpoint(self):
