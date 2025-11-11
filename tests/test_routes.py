@@ -507,3 +507,14 @@ class TestYourResourceService(TestCase):
         )
         assert resp.status_code == status.HTTP_200_OK
         assert resp.get_json() == []
+
+    # ----------------------------------------------------------
+    # TEST HEALTH ENDPOINT
+    # ----------------------------------------------------------
+    def test_health_endpoint(self):
+        """It should return 200 OK for health check"""
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.get_json()
+        self.assertIsNotNone(data)
+        self.assertEqual(data.get("status"), "OK")
