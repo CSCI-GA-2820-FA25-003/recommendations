@@ -7,7 +7,7 @@ All of the models are stored in this module
 import logging
 from datetime import datetime, timezone
 from typing import Any, Mapping
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Enum as SAEnum
@@ -20,6 +20,10 @@ db = SQLAlchemy()
 
 class DataValidationError(Exception):
     """Used for data validation errors when deserializing"""
+
+
+class ResourceNotFoundError(Exception):
+    """Used when a requested resource is not found"""
 
 
 # define Enum
@@ -294,6 +298,206 @@ class Recommendation(db.Model):  # pylint: disable=too-many-instance-attributes
         """Returns all Recommendations with confidence_score >= threshold"""
         logger.info("Processing confidence_score >= %s query ...", threshold)
         return cls.query.filter(cls.confidence_score >= threshold)
+
+    @classmethod
+    def apply_flat_discount_to_accessories(
+        cls, discount_percentage: Decimal
+    ) -> tuple[list[int], int]:
+        """
+        Apply a flat discount to all accessory recommendations.
+
+        Args:
+            discount_percentage: Discount percentage (0 < discount < 100)
+
+        Returns:
+            tuple: (list of updated recommendation IDs, count of updated records)
+
+        Raises:
+            DataValidationError: If no accessory recommendations found or discount invalid
+        """
+
+        # Validate discount percentage
+        if discount_percentage <= Decimal("0") or discount_percentage >= Decimal("100"):
+            raise DataValidationError("Discount must be between 0 and 100")
+
+        # Get all accessory recommendations
+        accessory_recommendations = cls.find_by_recommendation_type("accessory").all()
+        if len(accessory_recommendations) == 0:
+            raise ResourceNotFoundError("No matching accessory recommendations found")
+
+        updated_recommendation_ids = []
+        current_timestamp = datetime.now(timezone.utc)
+        discount_multiplier = (Decimal("100") - discount_percentage) / Decimal("100")
+
+        for recommendation in accessory_recommendations:
+            recommendation_was_updated = False
+
+            # Apply discount to base_product_price if not None
+            if recommendation.base_product_price is not None:
+                discounted_base_price = (
+                    recommendation.base_product_price * discount_multiplier
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                recommendation.base_product_price = discounted_base_price
+                recommendation_was_updated = True
+
+            # Apply discount to recommended_product_price if not None
+            if recommendation.recommended_product_price is not None:
+                discounted_recommended_price = (
+                    recommendation.recommended_product_price * discount_multiplier
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                recommendation.recommended_product_price = discounted_recommended_price
+                recommendation_was_updated = True
+
+            if recommendation_was_updated:
+                recommendation.updated_date = current_timestamp
+                updated_recommendation_ids.append(recommendation.id)
+
+        if not updated_recommendation_ids:
+            raise ResourceNotFoundError("No matching accessory recommendations found")
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.error("Error applying flat discount: %s", e)
+            raise DataValidationError(f"Database error: {e}") from e
+
+        return updated_recommendation_ids, len(updated_recommendation_ids)
+
+    @staticmethod
+    def _parse_recommendation_id(key: Any) -> int:
+        """Parse and validate recommendation_id keys from custom discount mappings."""
+        try:
+            return int(key)
+        except (ValueError, TypeError) as exc:
+            raise DataValidationError(
+                "Keys must be numeric recommendation IDs"
+            ) from exc
+
+    @staticmethod
+    def _validate_discount_percentage(percent: Any) -> Decimal:
+        """Validate discount percentage is (0, 100) and return as Decimal."""
+        try:
+            value = Decimal(str(percent))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise DataValidationError("Discount must be between 0 and 100") from exc
+        if value <= Decimal("0") or value >= Decimal("100"):
+            raise DataValidationError("Discount must be between 0 and 100")
+        return value
+
+    @staticmethod
+    def _apply_discount(value: Decimal, percent: Decimal) -> Decimal:
+        """Apply percentage discount with 2-decimal rounding."""
+        multiplier = (Decimal("100") - percent) / Decimal("100")
+        return (value * multiplier).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @classmethod
+    def _apply_discounts_to_single_recommendation(
+        cls,
+        recommendation: "Recommendation",
+        base_pct: Decimal | None,
+        rec_pct: Decimal | None,
+        timestamp: datetime,
+    ) -> bool:
+        """Apply discounts to a single recommendation. Returns True if updated."""
+        updated = False
+
+        if base_pct is not None and recommendation.base_product_price is not None:
+            recommendation.base_product_price = cls._apply_discount(
+                recommendation.base_product_price,
+                base_pct,
+            )
+            updated = True
+
+        if rec_pct is not None and recommendation.recommended_product_price is not None:
+            recommendation.recommended_product_price = cls._apply_discount(
+                recommendation.recommended_product_price,
+                rec_pct,
+            )
+            updated = True
+
+        if updated:
+            recommendation.updated_date = timestamp
+
+        return updated
+
+    @classmethod
+    def apply_custom_discounts(
+        cls, recommendation_discount_mappings: dict
+    ) -> list[int]:
+        """
+        Apply custom per-recommendation discounts.
+
+        Args:
+            recommendation_discount_mappings: Dict mapping recommendation_id to discount objects
+                Example: {"123": {"base_product_price": 10, "recommended_product_price": 5}}
+
+        Returns:
+            list: Updated recommendation IDs
+
+        Raises:
+            DataValidationError: If mappings are invalid or database error
+        """
+
+        if (
+            not isinstance(recommendation_discount_mappings, dict)
+            or not recommendation_discount_mappings
+        ):
+            raise DataValidationError(
+                "JSON body must map recommendation_id to discount objects"
+            )
+
+        updated_recommendation_ids: list[int] = []
+        current_timestamp = datetime.now(timezone.utc)
+
+        for key, discount_config in recommendation_discount_mappings.items():
+            recommendation_id = cls._parse_recommendation_id(key)
+
+            if not isinstance(discount_config, dict) or not discount_config:
+                raise DataValidationError(
+                    "Each value must be an object with price discount fields"
+                )
+
+            base_raw = discount_config.get("base_product_price")
+            rec_raw = discount_config.get("recommended_product_price")
+
+            if base_raw is None and rec_raw is None:
+                raise DataValidationError(
+                    "Provide at least one of base_product_price or recommended_product_price"
+                )
+
+            base_pct = (
+                cls._validate_discount_percentage(base_raw)
+                if base_raw is not None
+                else None
+            )
+            rec_pct = (
+                cls._validate_discount_percentage(rec_raw)
+                if rec_raw is not None
+                else None
+            )
+
+            recommendation = cls.find(recommendation_id)
+            if not recommendation:
+                # Non-existent IDs are skipped (no error)
+                continue
+
+            if cls._apply_discounts_to_single_recommendation(
+                recommendation,
+                base_pct,
+                rec_pct,
+                current_timestamp,
+            ):
+                updated_recommendation_ids.append(recommendation.id)
+
+        try:
+            db.session.commit()
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            logger.error("Error applying custom discounts: %s", exc)
+            raise DataValidationError(f"Database error: {exc}") from exc
+
+        return updated_recommendation_ids
 
     # ----------------------------------------------------------
     #  Multiple Filters

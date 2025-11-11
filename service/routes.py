@@ -20,11 +20,17 @@ Recommendation Service
 This service implements a REST API that allows you to Create, Read, Update
 and Delete Recommendation
 """
+from decimal import Decimal, InvalidOperation
 
 from flask import jsonify, request, abort, url_for
 from flask import current_app as app  # Import Flask application
-from service.models import DataValidationError, Recommendation
+
 from service.common import status  # HTTP Status Codes
+from service.models import (
+    DataValidationError,
+    ResourceNotFoundError,
+    Recommendation,
+)
 
 
 ######################################################################
@@ -243,8 +249,110 @@ def list_recommendations():
 
 
 ######################################################################
+# APPLY DISCOUNT (NON-CRUD ACTION)
+######################################################################
+@app.route("/recommendations/apply_discount", methods=["PUT"])
+def apply_discount():
+    """
+    Apply discounts to recommendation prices.
+
+    Modes:
+      1) Flat mode (query string):
+         PUT /recommendations/apply_discount?discount=10
+         - Applies the same percentage to all accessory recommendations.
+         - Only updates price fields that are non-null.
+      2) Custom mode (JSON body):
+         PUT /recommendations/apply_discount
+         Content-Type: application/json
+         {
+           "<recommendation_id>": {
+             "base_product_price": <0..100>,
+             "recommended_product_price": <0..100>
+           },
+           ...
+         }
+    """
+    app.logger.info("Request to apply discounts")
+
+    # Determine mode
+    discount_query_param = request.args.get("discount", type=str)
+    request_body = None
+    if discount_query_param is None:
+        # If no query param, try JSON body for custom mode
+        if request.headers.get("Content-Type") and request.data:
+            check_content_type("application/json")
+        request_body = request.get_json(silent=True)
+
+    # If neither provided -> 400
+    if discount_query_param is None and request_body is None:
+        return (
+            jsonify({"message": "At least a query discount or JSON body is required"}),
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        # Flat mode
+        if discount_query_param is not None:
+            discount_percentage = validate_discount_percent(discount_query_param)
+            updated_recommendation_ids, updated_count = (
+                Recommendation.apply_flat_discount_to_accessories(discount_percentage)
+            )
+            return (
+                jsonify(
+                    {
+                        "message": f"Applied {discount_percentage}% discount to {updated_count} accessory recommendations",
+                        "updated_count": updated_count,
+                        "updated_ids": updated_recommendation_ids,
+                    }
+                ),
+                status.HTTP_200_OK,
+            )
+
+        # Custom mode
+        if not isinstance(request_body, dict) or not request_body:
+            return (
+                jsonify(
+                    {
+                        "message": "JSON body must map recommendation_id to discount objects"
+                    }
+                ),
+                status.HTTP_400_BAD_REQUEST,
+            )
+        updated_recommendation_ids = Recommendation.apply_custom_discounts(request_body)
+        return (
+            jsonify(
+                {
+                    "message": "Applied custom discounts",
+                    "updated_ids": updated_recommendation_ids,
+                }
+            ),
+            status.HTTP_200_OK,
+        )
+
+    except DataValidationError as e:
+        return jsonify({"message": str(e)}), status.HTTP_400_BAD_REQUEST
+    except ResourceNotFoundError as e:
+        return jsonify({"message": str(e)}), status.HTTP_404_NOT_FOUND
+
+
+######################################################################
 #  U T I L I T Y   F U N C T I O N S
 ######################################################################
+
+
+######################################################################
+# Discount validation helper
+######################################################################
+def validate_discount_percent(value) -> Decimal:
+    """Validates that discount percentage is between 0 and 100 (exclusive)"""
+    try:
+        pct = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        abort(status.HTTP_400_BAD_REQUEST, "Discount must be between 0 and 100")
+
+    if pct <= Decimal("0") or pct >= Decimal("100"):
+        abort(status.HTTP_400_BAD_REQUEST, "Discount must be between 0 and 100")
+    return pct
 
 
 ######################################################################
@@ -267,3 +375,15 @@ def check_content_type(content_type) -> None:
         status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         f"Content-Type must be {content_type}",
     )
+
+
+######################################################################
+#  HEALTH  E N D P O I N T S
+######################################################################
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Health check endpoint for Kubernetes probes"""
+    app.logger.info("Health check requested")
+    return jsonify(status="OK"), status.HTTP_200_OK
