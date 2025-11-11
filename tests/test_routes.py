@@ -507,3 +507,12 @@ class TestYourResourceService(TestCase):
         )
         assert resp.status_code == status.HTTP_200_OK
         assert resp.get_json() == []
+
+    # ----------------------------------------------------------
+    # TEST UI
+    # ----------------------------------------------------------
+    def test_serve_ui(self):
+        """It should call the Home Page"""
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(b"Recommendation REST API Service", response.data)
