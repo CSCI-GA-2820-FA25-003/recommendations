@@ -1,7 +1,7 @@
 # These can be overidden with env vars.
 REGISTRY ?= cluster-registry:5000
-IMAGE_NAME ?= petshop
-IMAGE_TAG ?= 1.0
+IMAGE_NAME ?= recommendations
+IMAGE_TAG ?= latest
 IMAGE ?= $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 PLATFORM ?= "linux/amd64,linux/arm64"
 CLUSTER ?= nyu-devops
@@ -66,7 +66,12 @@ cluster-rm: ## Remove a K3D Kubernetes cluster
 .PHONY: deploy
 deploy: ## Deploy the service on local Kubernetes
 	$(info Deploying service locally...)
-	kubectl apply -R -f k8s/
+	kubectl apply -f k8s/namespace.yaml
+	kubectl -n app apply -f k8s/postgres/
+	kubectl -n app apply -f k8s/deployment.yaml
+	kubectl -n app apply -f k8s/service.yaml
+	kubectl -n app apply -f k8s/ingress.yaml
+	kubectl -n app rollout restart deployment $(IMAGE_NAME)
 
 ############################################################
 # COMMANDS FOR BUILDING THE IMAGE
@@ -84,7 +89,8 @@ init:	## Creates the buildx instance
 .PHONY: build
 build:	## Build the project container image for local platform
 	$(info Building $(IMAGE)...)
-	docker build --rm --pull --tag $(IMAGE) .
+	docker build --rm -t $(IMAGE_NAME):$(IMAGE_TAG) -f .devcontainer/Dockerfile .
+	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE)
 
 .PHONY: push
 push:	## Push the image to the container registry
@@ -94,7 +100,7 @@ push:	## Push the image to the container registry
 .PHONY: buildx
 buildx:	## Build multi-platform image with buildx
 	$(info Building multi-platform image $(IMAGE) for $(PLATFORM)...)
-	docker buildx build --file Dockerfile --pull --platform=$(PLATFORM) --tag $(IMAGE) --push .
+	docker buildx build --file .devcontainer/Dockerfile --pull --platform=$(PLATFORM) --tag $(IMAGE) --push .
 
 .PHONY: remove
 remove:	## Stop and remove the buildx builder
