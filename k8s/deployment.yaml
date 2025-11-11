@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: recommendations
-          image: k3d-cluster-registry:5000/recommendations:latest   # replace with your real image later
+          image: cluster-registry:5000/recommendations:latest   # replace with your real image later
           imagePullPolicy: Always
           command: ["gunicorn"]
           args: ["--chdir", "/app", "--bind", "0.0.0.0:8080", "wsgi:app"]
