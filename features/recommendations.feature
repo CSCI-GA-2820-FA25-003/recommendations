@@ -30,3 +30,12 @@ Feature: The recommendation service back-end
         And I should see "" in the "Base Product ID" field
         And I should see "" in the "Recommended Product ID" field
         And the remembered recommendation should not exist
+    
+    Scenario: List all recommendations
+        Given the recommendation service is running
+        When I list all recommendations
+        Then the response status code should be "200"
+        And I should receive at least 2 recommendations
+        And I should see a recommendation with base product "1001" and recommended product "2001"
+        And I should see a recommendation with base product "3001" and recommended product "4001"
+
