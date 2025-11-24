@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 HTTP_200_OK = 200
 HTTP_201_CREATED = 201
 HTTP_409_CONFLICT = 409
+HTTP_404_NOT_FOUND = 404
 
 WAIT_TIMEOUT = 60
 
@@ -152,3 +153,72 @@ def step_should_see_in_dropdown(context, expected, field_label):
     assert str(expected) == str(
         value
     ), f"Expected {expected} in {field_label}, got {value}"
+
+
+######################################################################
+# Scenario: Delete an existing recommendation via the admin UI
+######################################################################
+@given(
+    'I have the recommendation with base product "{base_id}" and recommended product "{rec_id}"'
+)
+def step_have_recommendation(context, base_id, rec_id):
+    """Fetch and store a recommendation id matching the given base/recommended ids."""
+    resp = requests.get(
+        f"{context.base_url}/recommendations",
+        params={"base_product_id": int(base_id)},
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    matches = [
+        rec
+        for rec in resp.json()
+        if str(rec.get("recommended_product_id")) == str(rec_id)
+    ]
+    assert (
+        matches
+    ), f"No recommendation found for base {base_id} and recommended {rec_id}"
+    context.remembered_rec = matches[0]
+
+
+@when('I press the "Delete" button')
+def step_press_delete(context):
+    """Press the Delete button on the UI."""
+    context.driver.find_element(By.ID, "delete-btn").click()
+
+
+@then('I should see "" in the "Base Product ID" field')
+def step_base_id(context):
+    """The Base Product ID field should be empty"""
+    element_id = _label_to_element_id("Base Product ID")
+    value = _field_value(context, element_id)
+    assert (
+        value == ""
+    ), f'Expected "Base Product ID" field to be empty, but got "{value}"'
+
+
+@then('I should see "" in the "Recommended Product ID" field')
+def step_rec_id(context):
+    """The Recommended Product ID field should be empty"""
+    element_id = _label_to_element_id("Recommended Product ID")
+    value = _field_value(context, element_id)
+    assert (
+        value == ""
+    ), f'Expected "Recommended Product ID" field to be empty, but got "{value}"'
+
+
+@then("the remembered recommendation should not exist")
+def step_remembered_recommendation_should_not_exist(context):
+    """Verify that the remembered recommendation no longer exists via the API."""
+    rec_id = getattr(context, "current_rec_id", None)
+    if rec_id is None and hasattr(context, "remembered_rec"):
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    assert rec_id is not None, "No recommendation id remembered in context"
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert (
+        resp.status_code == HTTP_404_NOT_FOUND
+    ), f"Expected 404 after delete, got {resp.status_code}"
