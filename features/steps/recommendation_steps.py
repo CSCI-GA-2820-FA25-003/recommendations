@@ -222,3 +222,50 @@ def step_remembered_recommendation_should_not_exist(context):
     assert (
         resp.status_code == HTTP_404_NOT_FOUND
     ), f"Expected 404 after delete, got {resp.status_code}"
+
+
+######################################################################
+# Scenario: List all recommendations
+######################################################################
+
+
+@when("I list all recommendations")
+def step_list_all_recommendations(context):
+    """Call the list endpoint without any filters"""
+    resp = requests.get(
+        f"{context.base_url}/recommendations",
+        timeout=WAIT_TIMEOUT,
+    )
+    context.list_response = resp
+    context.list_data = resp.json()
+
+
+@then('the response status code should be "{status_code}"')
+def step_list_status_code(context, status_code):
+    """Verify the HTTP status code from the list call"""
+    actual = str(context.list_response.status_code)
+    assert actual == str(status_code), f"Expected {status_code}, got {actual}"
+
+
+@then("I should receive at least {count:d} recommendations")
+def step_list_count(context, count):
+    """Verify the number of recommendations returned is at least count"""
+    actual = len(context.list_data)
+    assert actual >= count, f"Expected at least {count} recommendations, got {actual}"
+
+
+@then(
+    'I should see a recommendation with base product "{base_id}" and recommended product "{rec_id}"'
+)
+def step_list_contains_pair(context, base_id, rec_id):
+    """Verify that a specific base/recommended pair exists in the list"""
+    matches = [
+        rec
+        for rec in context.list_data
+        if str(rec.get("base_product_id")) == str(base_id)
+        and str(rec.get("recommended_product_id")) == str(rec_id)
+    ]
+    assert matches, (
+        f"No recommendation found for base {base_id} "
+        f"and recommended {rec_id} in list results"
+    )
