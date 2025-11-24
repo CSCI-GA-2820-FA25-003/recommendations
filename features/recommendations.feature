@@ -21,3 +21,12 @@ Feature: The recommendation service back-end
         And I should see "cross-sell" in the "Recommendation Type" dropdown
         And I should see "active" in the "Status" dropdown
         And I should see "0.85" in the "Confidence Score" field
+
+    Scenario: Delete an existing recommendation via the admin UI
+        Given I have the recommendation with base product "1001" and recommended product "2001"
+        When I set the "Recommendation ID" to that recommendation id
+        And I press the "Delete" button
+        Then I should see the message "Recommendation deleted"
+        And I should see "" in the "Base Product ID" field
+        And I should see "" in the "Recommended Product ID" field
+        And the remembered recommendation should not exist
