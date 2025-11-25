@@ -225,47 +225,69 @@ def step_remembered_recommendation_should_not_exist(context):
 
 
 ######################################################################
-# Scenario: List all recommendations
+# Scenario: List all recommendations via the admin UI
 ######################################################################
 
 
-@when("I list all recommendations")
-def step_list_all_recommendations(context):
-    """Call the list endpoint without any filters"""
-    resp = requests.get(
-        f"{context.base_url}/recommendations",
-        timeout=WAIT_TIMEOUT,
+def _parse_search_results(context):
+    """Parse the search results table into a list of dicts."""
+    table = context.driver.find_element(By.ID, "search_results")
+    rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
+    results = []
+    for row in rows:
+        cells = row.find_elements(By.TAG_NAME, "td")
+        if not cells:
+            continue
+        rec = {
+            "recommendation_id": cells[0].text.strip(),
+            "base_product_id": cells[1].text.strip(),
+            "recommended_product_id": cells[2].text.strip(),
+        }
+        results.append(rec)
+    return results
+
+
+@when('I press the "List" button')
+def step_press_list_button(context):
+    """Click the List button on the UI and wait for results."""
+    context.driver.find_element(By.ID, "list-btn").click()
+
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.presence_of_element_located((By.ID, "search_results"))
     )
-    context.list_response = resp
-    context.list_data = resp.json()
+    context.list_results = _parse_search_results(context)
 
 
-@then('the response status code should be "{status_code}"')
-def step_list_status_code(context, status_code):
-    """Verify the HTTP status code from the list call"""
-    actual = str(context.list_response.status_code)
-    assert actual == str(status_code), f"Expected {status_code}, got {actual}"
+@then("I should see at least {min_count:d} recommendations in the list")
+def step_see_at_least_recommendations(context, min_count):
+    results = getattr(context, "list_results", None)
+    if results is None:
+        results = _parse_search_results(context)
+        context.list_results = results
 
-
-@then("I should receive at least {count:d} recommendations")
-def step_list_count(context, count):
-    """Verify the number of recommendations returned is at least count"""
-    actual = len(context.list_data)
-    assert actual >= count, f"Expected at least {count} recommendations, got {actual}"
+    actual = len(results)
+    assert (
+        actual >= min_count
+    ), f"Expected at least {min_count} recommendations, got {actual}"
 
 
 @then(
-    'I should see a recommendation with base product "{base_id}" and recommended product "{rec_id}"'
+    'I should see a recommendation with base product "{base_id}" '
+    'and recommended product "{rec_id}" in the list'
 )
-def step_list_contains_pair(context, base_id, rec_id):
-    """Verify that a specific base/recommended pair exists in the list"""
+def step_see_recommendation_in_list(context, base_id, rec_id):
+    results = getattr(context, "list_results", None)
+    if results is None:
+        results = _parse_search_results(context)
+        context.list_results = results
+
     matches = [
         rec
-        for rec in context.list_data
-        if str(rec.get("base_product_id")) == str(base_id)
-        and str(rec.get("recommended_product_id")) == str(rec_id)
+        for rec in results
+        if str(rec["base_product_id"]) == str(base_id)
+        and str(rec["recommended_product_id"]) == str(rec_id)
     ]
     assert matches, (
-        f"No recommendation found for base {base_id} "
-        f"and recommended {rec_id} in list results"
+        f"Did not find recommendation with base {base_id} "
+        f"and recommended {rec_id} in the list"
     )

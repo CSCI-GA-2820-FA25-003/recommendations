@@ -31,11 +31,15 @@ Feature: The recommendation service back-end
         And I should see "" in the "Recommended Product ID" field
         And the remembered recommendation should not exist
     
-    Scenario: List all recommendations
+    Scenario: List all recommendations via the admin UI
         Given the recommendation service is running
-        When I list all recommendations
-        Then the response status code should be "200"
-        And I should receive at least 2 recommendations
-        And I should see a recommendation with base product "1001" and recommended product "2001"
-        And I should see a recommendation with base product "3001" and recommended product "4001"
+        And I am on the "Home Page"
+        When I press the "List" button
+        Then I should see the message "Success"
+        And I should see at least 2 recommendations in the list
+        And I should see a recommendation with base product "1001" and recommended product "2001" in the list
+        And I should see a recommendation with base product "3001" and recommended product "4001" in the list
+    
+    
+
 
