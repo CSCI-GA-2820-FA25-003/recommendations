@@ -419,4 +419,26 @@ $(function () {
             handleAjaxFail(res, "Recommendation not found");
         });
     });
+
+    // === List all recommendations ===
+    $("#list-btn").click(function (event) {
+        event.preventDefault();
+        $("#flash_message").empty();
+
+        const ajax = $.ajax({
+            type: "GET",
+            url: API_BASE_URL,          // GET /recommendations (no filters)
+            contentType: "application/json",
+        });
+
+        ajax.done(function (res) {
+            renderResultsTable(res);    
+            flash_message("Success");
+        });
+
+        ajax.fail(function (res) {
+            $("#search_results").empty();
+            handleAjaxFail(res, "Unable to list recommendations");
+        });
+    });
 });
