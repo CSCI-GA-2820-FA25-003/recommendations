@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: recommendations-ci
+  name: recommendations-cd
   namespace: XXXXXXX-dev # change namespace here !!!
 spec:
   description: >
