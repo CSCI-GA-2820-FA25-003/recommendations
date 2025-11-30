@@ -4,7 +4,7 @@ metadata:
   name: postgres
   namespace: app
 spec:
-  serviceName: postgres
+  serviceName: "postgres"
   replicas: 1
   selector:
     matchLabels:
@@ -16,16 +16,21 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:15
+          image: postgres:15-alpine
           ports:
             - containerPort: 5432
-              name: postgres
           envFrom:
             - secretRef:
                 name: db-secret
           volumeMounts:
-            - name: data
+            - name: postgres-storage
               mountPath: /var/lib/postgresql/data
-      volumes:
-        - name: data
-          emptyDir: {}  #Todo - add persistence later
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: "standard"
