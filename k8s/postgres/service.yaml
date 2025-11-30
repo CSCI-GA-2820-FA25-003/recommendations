@@ -1,13 +1,12 @@
 apiVersion: v1
-kind: Service
+kind: PersistentVolume
 metadata:
-  name: postgres
-  namespace: app
+  name: pv0001
 spec:
-  ports:
-    - port: 5432
-      targetPort: 5432
-      name: postgres
-  clusterIP: None
-  selector:
-    app: postgres
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/pv0001
+  storageClassName: "default"

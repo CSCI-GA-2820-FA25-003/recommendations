@@ -1,31 +1,66 @@
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
-  namespace: app
+  name: redis
+  labels:
+    app: redis
 spec:
-  serviceName: postgres
+  serviceName: "redis"
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app: redis
   template:
     metadata:
       labels:
-        app: postgres
+        app: redis
     spec:
       containers:
-        - name: postgres
-          image: postgres:15
+        - name: redis
+          image: "redis:6-alpine"
           ports:
-            - containerPort: 5432
-              name: postgres
-          envFrom:
-            - secretRef:
-                name: db-secret
+            - containerPort: 6379
+              protocol: TCP
           volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
+          - name: redis-storage
+            mountPath: /data
+          resources:
+            limits:
+              cpu: "0.50"
+              memory: "128Mi"
+            requests:
+              cpu: "0.25"        
+              memory: "64Mi"
       volumes:
-        - name: data
-          emptyDir: {}  #Todo - add persistence later
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-data
+        # emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: "default"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
