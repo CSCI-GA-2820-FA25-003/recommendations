@@ -4,7 +4,7 @@ import requests
 from behave import given, when, then  # pylint: disable=no-name-in-module
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 # HTTP Return Codes
 HTTP_200_OK = 200
@@ -36,6 +36,11 @@ def step_service_running(context):
 @given('I am on the "Home Page"')
 def step_open_home_page(context):
     context.driver.get(f"{context.base_url}/ui")
+
+
+######################################################################
+# Scenario: Read an existing recommendation via the admin UI
+######################################################################
 
 
 @given("the following recommendations exist")
@@ -156,8 +161,67 @@ def step_should_see_in_dropdown(context, expected, field_label):
 
 
 ######################################################################
+# Scenario: Update an existing recommendation via the admin UI
+######################################################################
+
+
+@when('I select "{option}" in the "{field_label}" dropdown')
+def step_select_in_dropdown_when(context, option, field_label):
+    """Choose an option from a dropdown by value."""
+    element_id = _label_to_element_id(field_label)
+    select_elem = Select(context.driver.find_element(By.ID, element_id))
+    select_elem.select_by_value(option)
+
+
+@when('I set the "{field_label}" field to "{value}"')
+def step_set_field_value(context, field_label, value):
+    """Populate a text/number field with a value."""
+    element_id = _label_to_element_id(field_label)
+    field = context.driver.find_element(By.ID, element_id)
+    field.clear()
+    field.send_keys(value)
+
+
+@when('I press the "Update" button')
+def step_press_update(context):
+    """Press the Update button on the UI."""
+    context.driver.find_element(By.ID, "update-btn").click()
+
+
+@then(
+    'the remembered recommendation should have type "{rec_type}", '
+    'status "{status}", and confidence score "{confidence}"'
+)
+def step_verify_updated_recommendation(context, rec_type, status, confidence):
+    """Verify the remembered recommendation reflects updated values via the API."""
+    rec_id = getattr(context, "current_rec_id", None)
+    if rec_id is None and hasattr(context, "remembered_rec"):
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    assert rec_id is not None, "No recommendation id available for verification"
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    assert str(rec.get("recommendation_type")) == str(rec_type)
+    assert str(rec.get("status")) == str(status)
+
+    expected_conf = float(confidence)
+    actual_conf = float(rec.get("confidence_score"))
+    assert (
+        abs(actual_conf - expected_conf) < 1e-6
+    ), f"Expected confidence {expected_conf}, got {actual_conf}"
+
+
+######################################################################
 # Scenario: Delete an existing recommendation via the admin UI
 ######################################################################
+
+
 @given(
     'I have the recommendation with base product "{base_id}" and recommended product "{rec_id}"'
 )
