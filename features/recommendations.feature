@@ -11,7 +11,7 @@ Feature: The recommendation service back-end
         And the recommendation service is running
         And I am on the "Home Page"
 
-    Scenario: View an existing recommendation via the admin UI
+    Scenario: Read an existing recommendation via the admin UI
         Given I remember the recommendation with base product "1001" and recommended product "2001"
         When I set the "Recommendation ID" to that recommendation id
         And I press the "Retrieve" button
@@ -22,6 +22,19 @@ Feature: The recommendation service back-end
         And I should see "active" in the "Status" dropdown
         And I should see "0.85" in the "Confidence Score" field
 
+    Scenario: Update an existing recommendation via the admin UI
+        Given I remember the recommendation with base product "1001" and recommended product "2001"
+        When I set the "Recommendation ID" to that recommendation id
+        And I select "up-sell" in the "Recommendation Type" dropdown
+        And I select "inactive" in the "Status" dropdown
+        And I set the "Confidence Score" field to "0.92"
+        And I press the "Update" button
+        Then I should see the message "Recommendation updated"
+        And I should see "up-sell" in the "Recommendation Type" dropdown
+        And I should see "inactive" in the "Status" dropdown
+        And I should see "0.92" in the "Confidence Score" field
+        And the remembered recommendation should have type "up-sell", status "inactive", and confidence score "0.92"
+
     Scenario: Delete an existing recommendation via the admin UI
         Given I have the recommendation with base product "1001" and recommended product "2001"
         When I set the "Recommendation ID" to that recommendation id
@@ -30,7 +43,7 @@ Feature: The recommendation service back-end
         And I should see "" in the "Base Product ID" field
         And I should see "" in the "Recommended Product ID" field
         And the remembered recommendation should not exist
-    
+
     Scenario: List all recommendations via the admin UI
         Given the recommendation service is running
         And I am on the "Home Page"
@@ -39,7 +52,3 @@ Feature: The recommendation service back-end
         And I should see at least 2 recommendations in the list
         And I should see a recommendation with base product "1001" and recommended product "2001" in the list
         And I should see a recommendation with base product "3001" and recommended product "4001" in the list
-    
-    
-
-
