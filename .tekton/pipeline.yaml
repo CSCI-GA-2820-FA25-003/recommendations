@@ -20,13 +20,14 @@ spec:
 
   tasks:
     - name: git-clone
+      params:
+        - name: URL
+          value: $(params.git-repo)
+        - name: REVISION
+          value: $(params.git-ref)
       taskRef:
-        name: git-clone        
+        kind: Task
+        name: git-clone
       workspaces:
         - name: output
-          workspace: pipeline-workspace 
-      params:
-        - name: url
-          value: $(params.git-repo)
-        - name: revision
-          value: $(params.git-ref)
+          workspace: pipeline-workspace
