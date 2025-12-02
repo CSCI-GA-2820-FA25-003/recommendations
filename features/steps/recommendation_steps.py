@@ -5,6 +5,8 @@ from behave import given, when, then  # pylint: disable=no-name-in-module
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.common.exceptions import NoSuchElementException
+from behave import when
 
 # HTTP Return Codes
 HTTP_200_OK = 200
@@ -355,3 +357,65 @@ def step_see_recommendation_in_list(context, base_id, rec_id):
         f"Did not find recommendation with base {base_id} "
         f"and recommended {rec_id} in the list"
     )
+
+
+######################################################################
+# Scenario: Filter recommendations by base_product_id and status via the admin UI
+######################################################################
+@when('I set the "{field_name}" to "{text}"')
+def step_impl_set_field(context, field_name, text):
+    """
+    Set a UI field (input/select) to some text
+
+    field_name such as "Base Product ID" / "Status" / "Recommendation Type" / "Confidence Score"
+    -> HTML id: base_product_id / status / recommendation_type / confidence_score
+    """
+    element_id = field_name.replace(" ", "_").lower()
+    element = context.driver.find_element(By.ID, element_id)
+    tag = element.tag_name.lower()
+
+    if tag == "select":
+        target = text.strip().lower()
+        options = element.find_elements(By.TAG_NAME, "option")
+
+        for option in options:
+            visible = option.text.strip()
+            value = (option.get_attribute("value") or "").strip()
+            if visible.lower() == target or value.lower() == target:
+                option.click()
+                return
+
+        raise AssertionError(
+            f'No option matching "{text}" found for select #{element_id}. '
+            f"Options were: {[o.text for o in options]}"
+        )
+    else:
+        try:
+            element.clear()
+        except Exception:
+            pass
+        element.send_keys(text)
+
+
+@when('I press the "{button_name}" button')
+def step_impl_press_button(context, button_name):
+    """Press a button by its visible text or id name"""
+    button_id = button_name.lower() + "-btn"
+    button = context.driver.find_element(By.ID, button_id)
+    button.click()
+
+
+@then('I should see "{text}" in the results table')
+def step_see_in_results_table(context, text):
+    """Check that some text appears in the search_results table."""
+    table = context.driver.find_element(By.ID, "search_results")
+    assert text in table.text, f'"{text}" not found in results table:\n{table.text}'
+
+
+@then('I should not see "{text}" in the results table')
+def step_not_see_in_results_table(context, text):
+    """Check that some text does NOT appear in the search_results table."""
+    table = context.driver.find_element(By.ID, "search_results")
+    assert (
+        text not in table.text
+    ), f'"{text}" was unexpectedly found in results table:\n{table.text}'
