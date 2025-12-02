@@ -360,7 +360,7 @@ def step_see_recommendation_in_list(context, base_id, rec_id):
 
 
 ######################################################################
-# Scenario: Filter recommendations by base_product_id and status via the admin UI
+# Scenario: Filter recommendations by XXXXX
 ######################################################################
 @when('I set the "{field_name}" to "{text}"')
 def step_impl_set_field(context, field_name, text):
