@@ -52,3 +52,77 @@ Feature: The recommendation service back-end
         And I should see at least 2 recommendations in the list
         And I should see a recommendation with base product "1001" and recommended product "2001" in the list
         And I should see a recommendation with base product "3001" and recommended product "4001" in the list
+    
+    Scenario: Filter recommendations by base_product_id and status via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Base Product ID" to "1001"
+        And I set the "Status" to "Active"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "1001" in the results table
+        And I should not see "3001" in the results table
+    
+    Scenario: Filter recommendations by base_product_id via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Base Product ID" to "1001"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "1001" in the results table
+        And I should not see "3001" in the results table
+
+    Scenario: Filter recommendations by status via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Status" to "active"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "active" in the results table
+        And I should not see "inactive" in the results table
+
+    Scenario: Filter recommendations by recommendation_type via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Recommendation Type" to "cross-sell"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "cross-sell" in the results table
+        And I should not see "accessory" in the results table
+
+    Scenario: Filter recommendations by minimum confidence_score via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Confidence Score" to "0.80"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "0.85" in the results table
+        And I should not see "0.70" in the results table
+
+    Scenario: Filter recommendations by base_product_id and status via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Base Product ID" to "1001"
+        And I set the "Status" to "active"
+        And I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "1001" in the results table
+        And I should not see "3001" in the results table
+
+    Scenario: Query all recommendations when no filter is provided via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I press the "Query" button
+        Then I should see the message "Success"
+        And I should see "1001" in the results table
+        And I should see "3001" in the results table
+
+    Scenario: Show an error when confidence_score is out of range via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Confidence Score" to "1.50"
+        And I press the "Query" button
+        Then I should see the message "Confidence Score must be a number between 0 and 1"
+        And I should not see "1001" in the results table
+        And I should not see "3001" in the results table
+
