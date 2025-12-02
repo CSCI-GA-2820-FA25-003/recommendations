@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: recommendations-cd
-  namespace: XXXXXXX-dev # change namespace here !!!
+  namespace: susanlin-dev # change namespace here !!!
 spec:
   description: >
     Initial CI/CD pipeline skeleton for the Recommendations service
@@ -21,13 +21,45 @@ spec:
   tasks:
     - name: git-clone
       params:
+        - name: CRT_FILENAME
+          value: ca-bundle.crt
+        - name: HTTP_PROXY
+          value: ''
+        - name: HTTPS_PROXY
+          value: ''
+        - name: NO_PROXY
+          value: ''
+        - name: SUBDIRECTORY
+          value: ''
+        - name: USER_HOME
+          value: /home/git
+        - name: DELETE_EXISTING
+          value: 'true'
+        - name: VERBOSE
+          value: 'false'
+        - name: SSL_VERIFY
+          value: 'true'
         - name: URL
-          value: $(params.git-repo)
+          value: $(params.GIT_REPO)
         - name: REVISION
-          value: $(params.git-ref)
+          value: $(params.GIT_REF)
+        - name: REFSPEC
+          value: ''
+        - name: SUBMODULES
+          value: 'true'
+        - name: DEPTH
+          value: '1'
+        - name: SPARSE_CHECKOUT_DIRECTORIES
+          value: ''
       taskRef:
-        kind: Task
-        name: git-clone
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+        resolver: cluster
       workspaces:
         - name: output
           workspace: pipeline-workspace
