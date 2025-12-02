@@ -391,54 +391,119 @@ $(function () {
         clear_form_data();
     });
 
-    $("#search-btn").click(function (event) {
+        // ---- Search button: query by filters / or query all ----
+    $("#query-btn").click(function (event) {
         event.preventDefault();
         $("#flash_message").empty();
 
-        const idResult = readIntegerField("#recommendation_id", "Recommendation ID", true);
-        if (idResult.error) {
-            flash_message("Enter a Recommendation ID to search");
+        const baseId = readIntegerField(
+            "#base_product_id",
+            "Base Product ID",
+            false 
+        );
+        if (baseId.error) {
+            flash_message(baseId.error);
             return;
         }
 
+        const confidence = readConfidenceScore(false); 
+        if (confidence.error) {
+            flash_message(confidence.error);
+            return;
+        }
+
+        // recommendation_type / status
+        const typeRaw = trimmedValue("#recommendation_type");
+        const type = typeRaw ? typeRaw.toLowerCase() : "";
+
+        const statusRaw = trimmedValue("#status");
+        const status = statusRaw ? statusRaw.toLowerCase() : "";
+
+        // query string
+        const params = [];
+
+        if (baseId.value !== null) {
+            params.push(
+                "base_product_id=" + encodeURIComponent(baseId.value)
+            );
+        }
+
+        if (type) {
+            params.push(
+                "recommendation_type=" + encodeURIComponent(type)
+            );
+        }
+
+        if (status) {
+            params.push("status=" + encodeURIComponent(status));
+        }
+
+        if (confidence.value !== undefined) {
+            params.push(
+                "confidence_score=" + encodeURIComponent(confidence.value)
+            );
+        }
+
+        let url = API_BASE_URL;
+        if (params.length > 0) {
+            // filter -> /recommendations?...
+            url = API_BASE_URL + "?" + params.join("&");
+        }
+        // emty params  →  GET /recommendations （query all）
+
         const ajax = $.ajax({
             type: "GET",
-            url: API_BASE_URL + "/" + idResult.value,
+            url: url,
             contentType: "application/json",
         });
 
         ajax.done(function (res) {
-            renderResultsTable([res]);
-            update_form_data(res);
+            renderResultsTable(res);
             flash_message("Success");
         });
 
         ajax.fail(function (res) {
             $("#search_results").empty();
             clear_form_data();
-            handleAjaxFail(res, "Recommendation not found");
+            handleAjaxFail(res, "No recommendations found");
         });
     });
 
-    // === List all recommendations ===
+    // ---- List all recommendations  ----
     $("#list-btn").click(function (event) {
         event.preventDefault();
         $("#flash_message").empty();
 
-        const ajax = $.ajax({
-            type: "GET",
-            url: API_BASE_URL,          // GET /recommendations (no filters)
-            contentType: "application/json",
-        });
+        // clear filter
+        setField("#base_product_id", "");
+        setField("#recommendation_type", "");
+        setField("#status", "");
+        setField("#confidence_score", "");
 
-        ajax.done(function (res) {
-            renderResultsTable(res);    
-            flash_message("Success");
-        });
-
-        ajax.fail(function (res) {
-            $("#search_results").empty();
-            handleAjaxFail(res, "Unable to list recommendations");
-        });
+        // Search click → query all
+        $("#query-btn").click();
     });
+
+
+    // // === List all recommendations ===
+    // $("#list-btn").click(function (event) {
+    //     event.preventDefault();
+    //     $("#flash_message").empty();
+
+    //     const ajax = $.ajax({
+    //         type: "GET",
+    //         url: API_BASE_URL,          // GET /recommendations (no filters)
+    //         contentType: "application/json",
+    //     });
+
+    //     ajax.done(function (res) {
+    //         renderResultsTable(res);    
+    //         flash_message("Success");
+    //     });
+
+    //     ajax.fail(function (res) {
+    //         $("#search_results").empty();
+    //         handleAjaxFail(res, "Unable to list recommendations");
+    //     });
+    // });
 });
