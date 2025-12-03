@@ -126,3 +126,17 @@ Feature: The recommendation service back-end
         And I should not see "1001" in the results table
         And I should not see "3001" in the results table
 
+    Scenario: Create a new recommendation via the admin UI
+        Given the recommendation service is running
+        And I am on the "Home Page"
+        When I set the "Base Product ID" field to "5001"
+        And I set the "Recommended Product ID" field to "6001"
+        And I select "cross-sell" in the "Recommendation Type" dropdown
+        And I select "active" in the "Status" dropdown
+        And I set the "Confidence Score" field to "0.95"
+        And I set the "Base Product Price" field to "39.99"
+        And I set the "Recommended Product Price" field to "14.99"
+        And I press the "Create" button
+        Then I should see the message "Recommendation created"
+        And I press the "List" button
+        And I should see a recommendation with base product "5001" and recommended product "6001" in the list

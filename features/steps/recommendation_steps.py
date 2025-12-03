@@ -5,8 +5,6 @@ from behave import given, when, then  # pylint: disable=no-name-in-module
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
-from selenium.common.exceptions import NoSuchElementException
-from behave import when
 
 # HTTP Return Codes
 HTTP_200_OK = 200
@@ -47,8 +45,23 @@ def step_open_home_page(context):
 
 @given("the following recommendations exist")
 def step_seed_recommendations(context):
-    """Create the recommendations listed in the Background table."""
+    """Delete all recommendations and load the ones from the Background table."""
     rest_endpoint = f"{context.base_url}/recommendations"
+
+    # 1) Delete all existing recommendations
+    resp = requests.get(rest_endpoint, timeout=WAIT_TIMEOUT)
+    resp.raise_for_status()
+    for rec in resp.json():
+        rec_id = rec["recommendation_id"]
+        del_resp = requests.delete(f"{rest_endpoint}/{rec_id}", timeout=WAIT_TIMEOUT)
+        # Most APIs return 204 for successful delete
+        assert del_resp.status_code in (
+            HTTP_200_OK,
+            204,
+            HTTP_404_NOT_FOUND,
+        ), f"Failed to delete recommendation {rec_id}: {del_resp.status_code}"
+
+    # 2) Seed fresh recommendations from the table
     for row in context.table:
         payload = {
             "base_product_id": int(row["base_product_id"]),
@@ -71,9 +84,7 @@ def step_seed_recommendations(context):
             ]
 
         resp = requests.post(rest_endpoint, json=payload, timeout=WAIT_TIMEOUT)
-        # Accept already-present data (409) to keep Background idempotent
-        if resp.status_code not in (HTTP_200_OK, HTTP_201_CREATED, HTTP_409_CONFLICT):
-            resp.raise_for_status()
+        resp.raise_for_status()
 
 
 @given(
@@ -419,3 +430,9 @@ def step_not_see_in_results_table(context, text):
     assert (
         text not in table.text
     ), f'"{text}" was unexpectedly found in results table:\n{table.text}'
+
+
+@then('I press the "{button_name}" button')
+def step_impl_press_button_then(context, button_name):
+    """Alias for pressing a button in a Then/And step."""
+    return step_impl_press_button(context, button_name)
