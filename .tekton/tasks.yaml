@@ -26,7 +26,7 @@ spec:
       default: quay.io/rofrano/python:3.11-slim
     - name: path
       description: The path to the module which should be analyzed by pylint
-      default: "."
+      default: "service"
       type: string
     - name: args
       description: The arguments to pass to the pylint CLI.
