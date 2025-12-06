@@ -3,46 +3,85 @@ kind: Pipeline
 metadata:
   name: recommendations-cd
 spec:
-  description: >
+  description: |
     Initial CI/CD pipeline skeleton for the Recommendations service
-  workspaces:
-    - name: pipeline-workspace 
   params:
-    - name: git-repo
-      type: string
+    - default: 'https://github.com/CSCI-GA-2820-FA25-003/recommendations.git'
       description: URL to the git repo
-      default: https://github.com/CSCI-GA-2820-FA25-003/recommendations.git
-    - name: git-ref
+      name: GIT_REPO
       type: string
+    - default: master
       description: the reference (branch or ref)
-      default: master          
-
+      name: GIT_REF
+      type: string
+#################################################
+#               task1: git-clone                #
+#################################################
   tasks:
     - name: git-clone
+      params:
+        - name: CRT_FILENAME
+          value: ca-bundle.crt
+        - name: HTTP_PROXY
+          value: ''
+        - name: HTTPS_PROXY
+          value: ''
+        - name: NO_PROXY
+          value: ''
+        - name: SUBDIRECTORY
+          value: ''
+        - name: USER_HOME
+          value: /home/git
+        - name: DELETE_EXISTING
+          value: 'true'
+        - name: VERBOSE
+          value: 'false'
+        - name: SSL_VERIFY
+          value: 'true'
+        - name: URL
+          value: $(params.GIT_REPO)
+        - name: REVISION
+          value: $(params.GIT_REF)
+        - name: REFSPEC
+          value: ''
+        - name: SUBMODULES
+          value: 'true'
+        - name: DEPTH
+          value: '1'
+        - name: SPARSE_CHECKOUT_DIRECTORIES
+          value: ''
       taskRef:
-        name: git-clone        
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+        resolver: cluster
       workspaces:
         - name: output
-          workspace: pipeline-workspace 
-      params:
-        - name: url
-          value: $(params.git-repo)
-        - name: revision
-          value: $(params.git-ref)
-  finally:  
+          workspace: pipeline-workspace
+#################################################
+#               task2-1: pylint                 #
+#################################################
     - name: pylint
-      taskRef:
-        kind: Task
-        name: pylint
       params:
         - name: image
-          value: quay.io/rofrano/python:3.11-slim
+          value: 'quay.io/rofrano/python:3.11-slim'
         - name: path
-          value: services
+          value: service
         - name: args
           value: []
         - name: requirements-file
           value: requirements.txt
+      runAfter:
+        - git-clone
+      taskRef:
+        kind: Task
+        name: pylint
       workspaces:
         - name: source
           workspace: pipeline-workspace
+  workspaces:
+    - name: pipeline-workspace
