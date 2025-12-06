@@ -24,12 +24,27 @@ from decimal import Decimal, InvalidOperation
 
 from flask import jsonify, request, abort, url_for
 from flask import current_app as app  # Import Flask application
+from flask_restx import Api, Resource, fields, reqparse, inputs
 
 from service.common import status  # HTTP Status Codes
 from service.models import (
     DataValidationError,
     ResourceNotFoundError,
     Recommendation,
+)
+
+######################################################################
+# Configure Swagger before initializing it
+######################################################################
+api = Api(
+    app,
+    version="1.0.0",
+    title="Recommendation REST API Service",
+    description="This is a Recommendation service",
+    default="recommendations",
+    default_label="Recommendation operations",
+    doc="/apidocs",  # Swagger UI
+    prefix="/api",
 )
 
 
