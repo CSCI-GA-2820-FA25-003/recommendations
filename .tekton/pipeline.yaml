@@ -30,3 +30,20 @@ spec:
           value: $(params.git-repo)
         - name: revision
           value: $(params.git-ref)
+  finally:  
+    - name: pylint
+      taskRef:
+        kind: Task
+        name: pylint
+      params:
+        - name: image
+          value: quay.io/rofrano/python:3.11-slim
+        - name: path
+          value: services
+        - name: args
+          value: []
+        - name: requirements-file
+          value: requirements.txt
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
