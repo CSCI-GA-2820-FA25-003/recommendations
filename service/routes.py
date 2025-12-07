@@ -15,10 +15,26 @@
 ######################################################################
 
 """
-Recommendation Service
+Recommendation Service with Swagger (Flask-RESTX)
 
-This service implements a REST API that allows you to Create, Read, Update
-and Delete Recommendation
+This service implements a REST API that allows users to Create, Read, Update
+and Delete Recommendations, as well as apply discounts.
+
+UI Routes (no /api prefix):
+---------------------------
+GET /      - Root JSON
+GET /ui    - Static UI page
+GET /health - Health check
+
+REST API Routes (all prefixed with /api):
+----------------------------------------
+GET    /api/recommendations
+POST   /api/recommendations
+GET    /api/recommendations/<int:recommendation_id>
+PUT    /api/recommendations/<int:recommendation_id>
+DELETE /api/recommendations/<int:recommendation_id>
+
+PUT    /api/recommendations/apply_discount
 """
 from decimal import Decimal, InvalidOperation
 
