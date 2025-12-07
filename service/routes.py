@@ -375,6 +375,102 @@ class RecommendationCollection(Resource):
 
 
 ######################################################################
+#  PATH: /recommendations/apply_discount (NON-CRUD ACTION)
+######################################################################
+@api.route("/recommendations/apply_discount")
+class DiscountResource(Resource):
+    """Apply discounts to recommendations"""
+
+    @api.doc("apply_discount")
+    @api.response(200, "Discounts applied")
+    @api.response(400, "Invalid discount payload")
+    @api.response(404, "Some recommendations not found")
+    def put(self):
+        """
+        Apply discounts to recommendation prices.
+
+        Modes:
+          1) Flat mode (query string):
+             PUT /recommendations/apply_discount?discount=10
+             - Applies the same percentage to all accessory recommendations.
+             - Only updates price fields that are non-null.
+
+          2) Custom mode (JSON body):
+             PUT /recommendations/apply_discount
+             Content-Type: application/json
+             {
+               "<recommendation_id>": {
+                 "base_product_price": <0..100>,
+                 "recommended_product_price": <0..100>
+               },
+               ...
+             }
+        """
+        app.logger.info("Request to apply discounts")
+
+        # Determine mode
+        discount_query_param = request.args.get("discount", type=str)
+        request_body = None
+        if discount_query_param is None:
+            # If no query param, try JSON body for custom mode
+            if request.headers.get("Content-Type") and request.data:
+                check_content_type("application/json")
+            request_body = request.get_json(silent=True)
+
+        # If neither provided -> 400
+        if discount_query_param is None and request_body is None:
+            abort(
+                status.HTTP_400_BAD_REQUEST,
+                "At least a query 'discount' or JSON body is required",
+            )
+
+        try:
+            # Flat mode
+            if discount_query_param is not None:
+                discount_percentage = validate_discount_percent(discount_query_param)
+                (
+                    updated_recommendation_ids,
+                    updated_count,
+                ) = Recommendation.apply_flat_discount_to_accessories(
+                    discount_percentage
+                )
+                return (
+                    {
+                        "message": (
+                            f"Applied {discount_percentage}% discount "
+                            f"to {updated_count} accessory recommendations"
+                        ),
+                        "updated_count": updated_count,
+                        "updated_ids": updated_recommendation_ids,
+                    },
+                    status.HTTP_200_OK,
+                )
+
+            # Custom mode
+            if not isinstance(request_body, dict) or not request_body:
+                abort(
+                    status.HTTP_400_BAD_REQUEST,
+                    "JSON body must map recommendation_id to discount objects",
+                )
+
+            updated_recommendation_ids = Recommendation.apply_custom_discounts(
+                request_body
+            )
+            return (
+                {
+                    "message": "Applied custom discounts",
+                    "updated_ids": updated_recommendation_ids,
+                },
+                status.HTTP_200_OK,
+            )
+
+        except DataValidationError as err:
+            abort(status.HTTP_400_BAD_REQUEST, str(err))
+        except ResourceNotFoundError as err:
+            abort(status.HTTP_404_NOT_FOUND, str(err))
+
+
+######################################################################
 # CREATE A NEW RECOMMENDATION
 ######################################################################
 @app.route("/recommendations", methods=["POST"])
