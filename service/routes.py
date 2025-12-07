@@ -87,6 +87,80 @@ def health():
 
 
 ######################################################################
+# Swagger Models & Query Parameters
+######################################################################
+create_model = api.model(
+    "Recommendation",
+    {
+        "base_product_id": fields.Integer(
+            required=True, description="The base product id"
+        ),
+        "recommended_product_id": fields.Integer(
+            required=True, description="The recommended product id"
+        ),
+        "recommendation_type": fields.String(
+            required=False,
+            description="Type of recommendation (e.g., cross-sell, up-sell, accessory)",
+        ),
+        "status": fields.String(
+            required=False, description="Status of recommendation (active/inactive)"
+        ),
+        "confidence_score": fields.Float(
+            required=False,
+            description="Confidence score between 0 and 1",
+        ),
+        # Price fields
+        "base_product_price": fields.Float(
+            required=False, description="Base product price"
+        ),
+        "recommended_product_price": fields.Float(
+            required=False, description="Recommended product price"
+        ),
+    },
+)
+
+recommendation_model = api.inherit(
+    "RecommendationModel",
+    create_model,
+    {
+        "id": fields.Integer(
+            readOnly=True, description="The unique id assigned to this recommendation"
+        ),
+    },
+)
+
+# List /search's query string parameters
+rec_args = reqparse.RequestParser()
+rec_args.add_argument(
+    "base_product_id",
+    type=int,
+    location="args",
+    required=False,
+    help="Filter by base product id",
+)
+rec_args.add_argument(
+    "recommendation_type",
+    type=str,
+    location="args",
+    required=False,
+    help="Filter by recommendation type (cross-sell, up-sell, accessory)",
+)
+rec_args.add_argument(
+    "status",
+    type=str,
+    location="args",
+    required=False,
+    help="Filter by status (active, inactive)",
+)
+rec_args.add_argument(
+    "confidence_score",
+    type=inputs.float,
+    location="args",
+    required=False,
+    help="Filter by minimum confidence score (0..1)",
+)
+
+######################################################################
 #  R E S T   A P I   E N D P O I N T S
 ######################################################################
 
