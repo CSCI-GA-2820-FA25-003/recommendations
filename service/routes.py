@@ -166,6 +166,112 @@ rec_args.add_argument(
 
 
 ######################################################################
+#  PATH: /recommendations/{id}
+######################################################################
+@api.route("/recommendations/<int:recommendation_id>")
+@api.param("recommendation_id", "The Recommendation identifier")
+class RecommendationResource(Resource):
+    """
+    RecommendationResource
+
+    Handles a single Recommendation:
+    GET    /recommendations/<id>
+    PUT    /recommendations/<id>
+    DELETE /recommendations/<id>
+    """
+
+    # ------------------------------------------------------------------
+    # READ A Recommendation
+    # ------------------------------------------------------------------
+    @api.doc("get_recommendation")
+    @api.response(404, "Recommendation not found")
+    @api.marshal_with(recommendation_model)
+    def get(self, recommendation_id: int):
+        """
+        Retrieve a single Recommendation by id
+        """
+        app.logger.info(
+            "Request to Retrieve a Recommendation with id [%s]", recommendation_id
+        )
+        recommendation = Recommendation.find(recommendation_id)
+        if not recommendation:
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Recommendation with id '{recommendation_id}' was not found.",
+            )
+
+        app.logger.info("Returning recommendation: %s", recommendation.id)
+        return recommendation.serialize(), status.HTTP_200_OK
+
+    # ------------------------------------------------------------------
+    # UPDATE AN EXISTING RECOMMENDATION
+    # ------------------------------------------------------------------
+    @api.doc("update_recommendation")
+    @api.response(404, "Recommendation not found")
+    @api.response(400, "The posted Recommendation data was not valid")
+    @api.expect(create_model)
+    @api.marshal_with(recommendation_model)
+    def put(self, recommendation_id: int):
+        """
+        Update an existing Recommendation's editable fields.
+
+        Request Body (application/json) – at least one field:
+            recommendation_type: "up-sell" | "cross-sell" | "accessory"
+            confidence_score: 0.0..1.0
+            status: "active" | "inactive"
+            (and any other editable fields defined in the model)
+        """
+        app.logger.info(
+            "Request to Update recommendation with id: %s", recommendation_id
+        )
+        check_content_type("application/json")
+        rec = Recommendation.find(recommendation_id)
+        if rec is None:
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Recommendation with id '{recommendation_id}' was not found.",
+            )
+
+        data = api.payload or {}
+        if not data:
+            abort(
+                status.HTTP_400_BAD_REQUEST,
+                "At least one field is required to update",
+            )
+
+        try:
+            # Model handles normalization + validation
+            rec.update(data)
+        except DataValidationError as error:
+            abort(status.HTTP_400_BAD_REQUEST, str(error))
+
+        return rec.serialize(), status.HTTP_200_OK
+
+    # ------------------------------------------------------------------
+    # DELETE A RECOMMENDATION
+    # ------------------------------------------------------------------
+    @api.doc("delete_recommendation")
+    @api.response(204, "Recommendation deleted")
+    def delete(self, recommendation_id: int):
+        """
+        Delete a Recommendation by id
+        """
+        app.logger.info(
+            "Request to Delete a recommendation with id [%s]", recommendation_id
+        )
+
+        recommendation = Recommendation.find(recommendation_id)
+        if recommendation:
+            app.logger.info("Recommendation with ID: %d found.", recommendation.id)
+            recommendation.delete()
+
+        app.logger.info(
+            "Recommendation with ID: %d delete complete.", recommendation_id
+        )
+        return "", status.HTTP_204_NO_CONTENT
+
+
+######################################################################
 # CREATE A NEW RECOMMENDATION
 ######################################################################
 @app.route("/recommendations", methods=["POST"])
