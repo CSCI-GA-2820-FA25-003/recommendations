@@ -742,6 +742,10 @@ def apply_discount():
 ######################################################################
 #  U T I L I T Y   F U N C T I O N S
 ######################################################################
+def abort(error_code: int, message: str):
+    """Logs errors before aborting via Flask-RESTX"""
+    app.logger.error(message)
+    api.abort(error_code, message)
 
 
 ######################################################################
