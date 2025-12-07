@@ -272,6 +272,109 @@ class RecommendationResource(Resource):
 
 
 ######################################################################
+#  PATH: /recommendations
+######################################################################
+@api.route("/recommendations", strict_slashes=False)
+class RecommendationCollection(Resource):
+    """Handles all interactions with collections of Recommendations"""
+
+    # ------------------------------------------------------------------
+    # LIST RECOMMENDATIONS - Multiple Filters
+    # ------------------------------------------------------------------
+    @api.doc("list_recommendations")
+    @api.expect(rec_args, validate=True)
+    @api.marshal_list_with(recommendation_model)
+    def get(self):
+        """
+        Returns a list of Recommendations.
+
+        Supported query params (all optional, can be combined):
+          - base_product_id: int
+          - recommendation_type: "cross-sell", "up-sell", "accessory"
+          - status: "active", "inactive"
+          - confidence_score: float in [0, 1] (minimum threshold, inclusive)
+        """
+        app.logger.info("Request for recommendation list")
+
+        args = rec_args.parse_args()
+        base_product_id = args.get("base_product_id")
+        recommendation_type = args.get("recommendation_type")
+        rec_status = args.get("status")
+        confidence_score = args.get("confidence_score")
+
+        # Validate confidence_score range if provided
+        if confidence_score is not None:
+            if confidence_score < 0 or confidence_score > 1:
+                abort(
+                    status.HTTP_400_BAD_REQUEST,
+                    "confidence_score must be in [0, 1]",
+                )
+
+        # If no filters at all, return all
+        if (
+            base_product_id is None
+            and not recommendation_type
+            and not rec_status
+            and confidence_score is None
+        ):
+            app.logger.info("Find all recommendations")
+            recs = Recommendation.all()
+            results = [r.serialize() for r in recs]
+            app.logger.info("Returning %d recommendations", len(results))
+            return results, status.HTTP_200_OK
+
+        # Combined filters (logical AND)
+        query = Recommendation.filter_many(
+            base_product_id=base_product_id,
+            recommendation_type=recommendation_type,
+            status=rec_status,
+            min_confidence=confidence_score,
+        )
+        rows = query.all()
+        results = [r.serialize() for r in rows]
+        app.logger.info("Returning %d recommendations", len(results))
+        return results, status.HTTP_200_OK
+
+    # ------------------------------------------------------------------
+    # CREATE A NEW RECOMMENDATION
+    # ------------------------------------------------------------------
+    @api.doc("create_recommendation")
+    @api.response(400, "The posted data was not valid")
+    @api.expect(create_model)
+    @api.marshal_with(recommendation_model, code=201)
+    def post(self):
+        """
+        Create a Recommendation
+        This endpoint will create a Recommendation based on the posted data.
+        """
+        app.logger.info("Request to Create a Recommendation...")
+        check_content_type("application/json")
+
+        recommendation = Recommendation()
+        data = api.payload or {}
+        app.logger.info("Processing: %s", data)
+        try:
+            recommendation.deserialize(data)
+        except DataValidationError as error:
+            abort(status.HTTP_400_BAD_REQUEST, str(error))
+
+        # Save the new Recommendation to the database
+        recommendation.create()
+        app.logger.info("Recommendation with new id [%s] saved!", recommendation.id)
+
+        # Location header for newly created resource
+        location_url = api.url_for(
+            RecommendationResource, recommendation_id=recommendation.id, _external=True
+        )
+
+        return (
+            recommendation.serialize(),
+            status.HTTP_201_CREATED,
+            {"Location": location_url},
+        )
+
+
+######################################################################
 # CREATE A NEW RECOMMENDATION
 ######################################################################
 @app.route("/recommendations", methods=["POST"])
