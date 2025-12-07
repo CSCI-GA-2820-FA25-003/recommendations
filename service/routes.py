@@ -65,7 +65,7 @@ api = Api(
 
 
 ######################################################################
-# GET INDEX
+# Root
 ######################################################################
 @app.route("/")
 def index():
@@ -105,47 +105,64 @@ def health():
 ######################################################################
 # Swagger Models & Query Parameters
 ######################################################################
+# --------- Request / Response Models --------- #
+# create / update
 create_model = api.model(
     "Recommendation",
     {
-        "base_product_id": fields.Integer(
-            required=True, description="The base product id"
-        ),
+        "base_product_id": fields.Integer(required=True, description="Base product id"),
         "recommended_product_id": fields.Integer(
-            required=True, description="The recommended product id"
+            required=True, description="Recommended product id"
         ),
         "recommendation_type": fields.String(
-            required=False,
+            required=True,
             description="Type of recommendation (e.g., cross-sell, up-sell, accessory)",
         ),
         "status": fields.String(
-            required=False, description="Status of recommendation (active/inactive)"
+            required=True,
+            description="Status of recommendation (active / inactive)",
         ),
         "confidence_score": fields.Float(
-            required=False,
-            description="Confidence score between 0 and 1",
+            required=True,
+            description="Confidence score between 0.00 and 1.00",
         ),
-        # Price fields
         "base_product_price": fields.Float(
             required=False, description="Base product price"
         ),
         "recommended_product_price": fields.Float(
             required=False, description="Recommended product price"
         ),
-    },
-)
-
-recommendation_model = api.inherit(
-    "RecommendationModel",
-    create_model,
-    {
-        "id": fields.Integer(
-            readOnly=True, description="The unique id assigned to this recommendation"
+        "base_product_description": fields.String(
+            required=False, description="Description of the base product"
+        ),
+        "recommended_product_description": fields.String(
+            required=False, description="Description of the recommended product"
         ),
     },
 )
 
-# List /search's query string parameters
+#  response
+recommendation_model = api.inherit(
+    "RecommendationModel",
+    create_model,
+    {
+        "recommendation_id": fields.Integer(
+            readOnly=True,
+            description="The unique id assigned to this recommendation",
+        ),
+        "created_date": fields.String(
+            readOnly=True,
+            description="ISO-8601 timestamp when the recommendation was created",
+        ),
+        "updated_date": fields.String(
+            readOnly=True,
+            description="ISO-8601 timestamp when the recommendation was last updated",
+        ),
+    },
+)
+
+# --------- Query-string Parameters for list / query --------- #
+
 rec_args = reqparse.RequestParser()
 rec_args.add_argument(
     "base_product_id",
@@ -153,6 +170,13 @@ rec_args.add_argument(
     location="args",
     required=False,
     help="Filter by base product id",
+)
+rec_args.add_argument(
+    "recommended_product_id",
+    type=int,
+    location="args",
+    required=False,
+    help="Filter by recommended product id",
 )
 rec_args.add_argument(
     "recommendation_type",
@@ -170,11 +194,12 @@ rec_args.add_argument(
 )
 rec_args.add_argument(
     "confidence_score",
-    type=inputs.float,
+    type=float,
     location="args",
     required=False,
-    help="Filter by minimum confidence score (0..1)",
+    help="Filter by minimum confidence score (0.00–1.00)",
 )
+
 
 ######################################################################
 #  R E S T   A P I   E N D P O I N T S
