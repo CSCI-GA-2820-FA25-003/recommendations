@@ -77,7 +77,7 @@ def index():
             version="1.0",
             message="Welcome to the Recommendation Service! See docs at /apidocs.",
             docs="/apidocs",
-            list_url="/recommendations",
+            list_url="/api/recommendations",
         ),
         status.HTTP_200_OK,
     )
