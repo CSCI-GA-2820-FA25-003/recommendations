@@ -140,3 +140,49 @@ Feature: The recommendation service back-end
         Then I should see the message "Recommendation created"
         And I press the "List" button
         And I should see a recommendation with base product "5001" and recommended product "6001" in the list
+
+    Scenario: Apply flat discount to accessory recommendations via API
+        Given the recommendation service is running
+        And I remember the recommendation with base product "3001" and recommended product "4001"
+        And the remembered recommendation has base product price "29.99" and recommended product price "4.99"
+        When I apply a flat discount of "10" percent to all accessory recommendations
+        Then the API should return status "200"
+        And the response should indicate that discounts were applied to at least "1" recommendations
+        And the remembered recommendation should have base product price "26.99" and recommended product price "4.49"
+
+    Scenario: Apply flat discount with invalid percentage via API
+        Given the recommendation service is running
+        When I apply a flat discount of "0" percent to all accessory recommendations
+        Then the API should return status "400"
+        And the response message should contain "Discount must be between 0 and 100"
+
+    Scenario: Apply flat discount with percentage at boundary via API
+        Given the recommendation service is running
+        When I apply a flat discount of "100" percent to all accessory recommendations
+        Then the API should return status "400"
+        And the response message should contain "Discount must be between 0 and 100"
+
+    Scenario: Apply discount without parameters via API
+        Given the recommendation service is running
+        When I call apply discount endpoint without parameters
+        Then the API should return status "400"
+        And the response message should contain "required"
+
+    Scenario: Apply custom discount to specific recommendations via API
+        Given the recommendation service is running
+        And I remember the recommendation with base product "1001" and recommended product "2001"
+        And I remember the recommendation with base product "3001" and recommended product "4001"
+        And the remembered recommendation with base product "1001" has base product price "19.99" and recommended product price "9.99"
+        And the remembered recommendation with base product "3001" has base product price "29.99" and recommended product price "4.99"
+        When I apply custom discounts with base product price "5" and recommended product price "10" to the first remembered recommendation
+        And I apply custom discounts with base product price "15" and recommended product price "20" to the second remembered recommendation in the same request
+        Then the API should return status "200"
+        And the response should indicate custom discounts were applied
+        And the first remembered recommendation should have base product price "18.99" and recommended product price "8.99"
+        And the second remembered recommendation should have base product price "25.49" and recommended product price "3.99"
+
+    Scenario: Apply custom discount with invalid JSON body via API
+        Given the recommendation service is running
+        When I apply custom discounts with an empty JSON body
+        Then the API should return status "400"
+        And the response message should contain "JSON body must map recommendation_id"

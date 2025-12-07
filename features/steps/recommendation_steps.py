@@ -106,7 +106,12 @@ def step_remember_recommendation(context, base_id, rec_id):
     assert (
         matches
     ), f"No recommendation found for base {base_id} and recommended {rec_id}"
-    context.remembered_rec = matches[0]
+    rec = matches[0]
+    context.remembered_rec = rec
+    # Also store in remembered_recs dict for scenarios that need multiple
+    if not hasattr(context, "remembered_recs"):
+        context.remembered_recs = {}
+    context.remembered_recs[base_id] = {"recommendation": rec}
 
 
 @when('I set the "Recommendation ID" to that recommendation id')
@@ -436,3 +441,298 @@ def step_not_see_in_results_table(context, text):
 def step_impl_press_button_then(context, button_name):
     """Alias for pressing a button in a Then/And step."""
     return step_impl_press_button(context, button_name)
+
+
+######################################################################
+# Scenario: Apply discount via API
+######################################################################
+
+
+@given(
+    'the remembered recommendation has base product price "{base_price}" and recommended product price "{rec_price}"'
+)
+def step_remembered_rec_has_prices(context, base_price, rec_price):
+    """Verify and store the prices of the remembered recommendation."""
+    rec_id = context.remembered_rec["recommendation_id"]
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+    assert float(rec.get("base_product_price", 0)) == float(
+        base_price
+    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
+    assert float(rec.get("recommended_product_price", 0)) == float(
+        rec_price
+    ), f"Expected recommended_product_price {rec_price}, got {rec.get('recommended_product_price')}"
+    # Store prices for later verification
+    context.remembered_rec["original_base_price"] = float(base_price)
+    context.remembered_rec["original_rec_price"] = float(rec_price)
+
+
+@given(
+    'the remembered recommendation with base product "{base_id}" has base product price '
+    '"{base_price}" and recommended product price "{rec_price}"'
+)
+def step_remembered_rec_by_base_has_prices(context, base_id, base_price, rec_price):
+    """Find recommendation by base product ID and verify/store prices."""
+    # Find recommendation by base product ID
+    resp = requests.get(
+        f"{context.base_url}/recommendations",
+        params={"base_product_id": int(base_id)},
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    matches = resp.json()
+    assert matches, f"No recommendation found for base product {base_id}"
+
+    # Store as first or second remembered recommendation
+    if not hasattr(context, "remembered_recs"):
+        context.remembered_recs = {}
+
+    rec = matches[0]  # Take first match
+
+    # Verify prices
+    assert float(rec.get("base_product_price", 0)) == float(
+        base_price
+    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
+    assert float(rec.get("recommended_product_price", 0)) == float(rec_price), (
+        f"Expected recommended_product_price {rec_price}, "
+        f"got {rec.get('recommended_product_price')}"
+    )
+
+    context.remembered_recs[base_id] = {
+        "recommendation": rec,
+        "original_base_price": float(base_price),
+        "original_rec_price": float(rec_price),
+    }
+
+
+@when(
+    'I apply a flat discount of "{discount}" percent to all accessory recommendations'
+)
+def step_apply_flat_discount(context, discount):
+    """Apply a flat discount via the API using query parameter."""
+    url = f"{context.base_url}/recommendations/apply_discount"
+    params = {"discount": discount}
+    context.discount_response = requests.put(url, params=params, timeout=WAIT_TIMEOUT)
+
+
+@when("I call apply discount endpoint without parameters")
+def step_apply_discount_no_params(context):
+    """Call apply discount endpoint without any parameters."""
+    url = f"{context.base_url}/recommendations/apply_discount"
+    context.discount_response = requests.put(url, timeout=WAIT_TIMEOUT)
+
+
+@when(
+    'I apply custom discounts with base product price "{base_discount}" '
+    'and recommended product price "{rec_discount}" to the first remembered recommendation'
+)
+def step_apply_custom_discount_first(context, base_discount, rec_discount):
+    """Prepare custom discount for the first recommendation (no API call yet)."""
+    # Get the first remembered recommendation
+    if hasattr(context, "remembered_recs"):
+        # Use the first one in remembered_recs
+        first_key = list(context.remembered_recs.keys())[0]
+        rec_id = context.remembered_recs[first_key]["recommendation"][
+            "recommendation_id"
+        ]
+    else:
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    # Store for the combined API call in the second step
+    context.first_custom_discount_rec_id = rec_id
+    context.first_custom_discount_base = base_discount
+    context.first_custom_discount_rec = rec_discount
+    # Don't make API call here - wait for the second step to combine both
+
+
+@when(
+    'I apply custom discounts with base product price "{base_discount}" '
+    'and recommended product price "{rec_discount}" to the second remembered '
+    "recommendation in the same request"
+)
+def step_apply_custom_discount_second(context, base_discount, rec_discount):
+    """Apply custom discounts to both recommendations in a single API call."""
+    # Get the second remembered recommendation
+    if hasattr(context, "remembered_recs"):
+        keys = list(context.remembered_recs.keys())
+        if len(keys) >= 2:
+            second_key = keys[1]
+            second_rec_id = context.remembered_recs[second_key]["recommendation"][
+                "recommendation_id"
+            ]
+        else:
+            raise AssertionError("Second remembered recommendation not found")
+    else:
+        raise AssertionError("No remembered recommendations found")
+
+    # Make a single API call with both recommendations
+    url = f"{context.base_url}/recommendations/apply_discount"
+    body = {
+        str(context.first_custom_discount_rec_id): {
+            "base_product_price": float(context.first_custom_discount_base),
+            "recommended_product_price": float(context.first_custom_discount_rec),
+        },
+        str(second_rec_id): {
+            "base_product_price": float(base_discount),
+            "recommended_product_price": float(rec_discount),
+        },
+    }
+    context.discount_response = requests.put(
+        url,
+        json=body,
+        headers={"Content-Type": "application/json"},
+        timeout=WAIT_TIMEOUT,
+    )
+
+
+@when("I apply custom discounts with an empty JSON body")
+def step_apply_custom_discount_empty(context):
+    """Apply custom discount with empty JSON body."""
+    url = f"{context.base_url}/recommendations/apply_discount"
+    context.discount_response = requests.put(
+        url, json={}, headers={"Content-Type": "application/json"}, timeout=WAIT_TIMEOUT
+    )
+
+
+@then('the API should return status "{status_code}"')
+def step_api_status(context, status_code):
+    """Verify the API response status code."""
+    expected_status = int(status_code)
+    actual_status = context.discount_response.status_code
+    assert (
+        actual_status == expected_status
+    ), f"Expected status {expected_status}, got {actual_status}. Response: {context.discount_response.text}"
+
+
+@then(
+    'the response should indicate that discounts were applied to at least "{count}" recommendations'
+)
+def step_discount_applied_count(context, count):
+    """Verify the discount response indicates the correct number of updates."""
+    data = context.discount_response.json()
+    updated_count = data.get("updated_count", 0)
+    assert updated_count >= int(
+        count
+    ), f"Expected at least {count} recommendations updated, got {updated_count}"
+
+
+@then("the response should indicate custom discounts were applied")
+def step_custom_discount_applied(context):
+    """Verify the custom discount response indicates success."""
+    data = context.discount_response.json()
+    assert "updated_ids" in data, "Response should contain updated_ids"
+    assert (
+        len(data["updated_ids"]) > 0
+    ), "Should have at least one updated recommendation"
+
+
+@then('the response message should contain "{text}"')
+def step_response_contains(context, text):
+    """Verify the response message contains specific text."""
+    data = context.discount_response.json()
+    message = data.get("message", "")
+    assert (
+        text.lower() in message.lower()
+    ), f'Expected "{text}" in message, got "{message}"'
+
+
+@then(
+    'the remembered recommendation should have base product price "{base_price}" and recommended product price "{rec_price}"'
+)
+def step_verify_updated_prices(context, base_price, rec_price):
+    """Verify the remembered recommendation has updated prices."""
+    rec_id = context.remembered_rec["recommendation_id"]
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+
+
+@then(
+    'the first remembered recommendation should have base product price "{base_price}" '
+    'and recommended product price "{rec_price}"'
+)
+def step_verify_first_updated_prices(context, base_price, rec_price):
+    """Verify the first remembered recommendation has updated prices."""
+    if hasattr(context, "remembered_recs"):
+        first_key = list(context.remembered_recs.keys())[0]
+        rec_id = context.remembered_recs[first_key]["recommendation"][
+            "recommendation_id"
+        ]
+    else:
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+
+
+@then(
+    'the second remembered recommendation should have base product price "{base_price}" '
+    'and recommended product price "{rec_price}"'
+)
+def step_verify_second_updated_prices(context, base_price, rec_price):
+    """Verify the second remembered recommendation has updated prices."""
+    if hasattr(context, "remembered_recs"):
+        keys = list(context.remembered_recs.keys())
+        if len(keys) >= 2:
+            second_key = keys[1]
+            rec_id = context.remembered_recs[second_key]["recommendation"][
+                "recommendation_id"
+            ]
+        else:
+            raise AssertionError("Second remembered recommendation not found")
+    else:
+        raise AssertionError("No remembered recommendations found")
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
