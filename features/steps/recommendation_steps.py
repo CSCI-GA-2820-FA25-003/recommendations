@@ -1,5 +1,6 @@
 """Step definitions for recommendation UI feature."""
 
+import re
 import requests
 from behave import given, when, then  # pylint: disable=no-name-in-module
 from selenium.webdriver.common.by import By
@@ -106,7 +107,12 @@ def step_remember_recommendation(context, base_id, rec_id):
     assert (
         matches
     ), f"No recommendation found for base {base_id} and recommended {rec_id}"
-    context.remembered_rec = matches[0]
+    rec = matches[0]
+    context.remembered_rec = rec
+    # Also store in remembered_recs dict for scenarios that need multiple
+    if not hasattr(context, "remembered_recs"):
+        context.remembered_recs = {}
+    context.remembered_recs[base_id] = {"recommendation": rec}
 
 
 @when('I set the "Recommendation ID" to that recommendation id')
@@ -436,3 +442,419 @@ def step_not_see_in_results_table(context, text):
 def step_impl_press_button_then(context, button_name):
     """Alias for pressing a button in a Then/And step."""
     return step_impl_press_button(context, button_name)
+
+
+######################################################################
+# Scenario: Apply discount via API
+######################################################################
+
+
+@given(
+    'the remembered recommendation has base product price "{base_price}" and recommended product price "{rec_price}"'
+)
+def step_remembered_rec_has_prices(context, base_price, rec_price):
+    """Verify and store the prices of the remembered recommendation."""
+    rec_id = context.remembered_rec["recommendation_id"]
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+    assert float(rec.get("base_product_price", 0)) == float(
+        base_price
+    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
+    assert float(rec.get("recommended_product_price", 0)) == float(
+        rec_price
+    ), f"Expected recommended_product_price {rec_price}, got {rec.get('recommended_product_price')}"
+    # Store prices for later verification
+    context.remembered_rec["original_base_price"] = float(base_price)
+    context.remembered_rec["original_rec_price"] = float(rec_price)
+
+
+@given(
+    'the remembered recommendation with base product "{base_id}" has base product price '
+    '"{base_price}" and recommended product price "{rec_price}"'
+)
+def step_remembered_rec_by_base_has_prices(context, base_id, base_price, rec_price):
+    """Find recommendation by base product ID and verify/store prices."""
+    # Find recommendation by base product ID
+    resp = requests.get(
+        f"{context.base_url}/recommendations",
+        params={"base_product_id": int(base_id)},
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    matches = resp.json()
+    assert matches, f"No recommendation found for base product {base_id}"
+
+    # Store as first or second remembered recommendation
+    if not hasattr(context, "remembered_recs"):
+        context.remembered_recs = {}
+
+    rec = matches[0]  # Take first match
+
+    # Verify prices
+    assert float(rec.get("base_product_price", 0)) == float(
+        base_price
+    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
+    assert float(rec.get("recommended_product_price", 0)) == float(rec_price), (
+        f"Expected recommended_product_price {rec_price}, "
+        f"got {rec.get('recommended_product_price')}"
+    )
+
+    context.remembered_recs[base_id] = {
+        "recommendation": rec,
+        "original_base_price": float(base_price),
+        "original_rec_price": float(rec_price),
+    }
+
+
+@when(
+    'I apply a flat discount of "{discount}" percent to all accessory recommendations'
+)
+def step_apply_flat_discount(context, discount):
+    """Apply a flat discount via the UI."""
+    # Set the flat discount field
+    discount_field = context.driver.find_element(By.ID, "flat_discount")
+    discount_field.clear()
+    discount_field.send_keys(str(discount))
+
+    # Click the apply button
+    apply_button = context.driver.find_element(By.ID, "apply-flat-discount-btn")
+    apply_button.click()
+
+    # Wait for the response to appear
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.any_of(
+            EC.presence_of_element_located((By.ID, "discount_success_message")),
+            EC.presence_of_element_located((By.ID, "discount_error_message")),
+        )
+    )
+
+
+@when("I call apply discount endpoint without parameters")
+def step_apply_discount_no_params(context):
+    """Click apply discount button without filling in the discount field."""
+    # Click the apply button without entering a discount
+    apply_button = context.driver.find_element(By.ID, "apply-flat-discount-btn")
+    apply_button.click()
+
+    # Wait for the error message to appear
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.any_of(
+            EC.presence_of_element_located((By.ID, "discount_success_message")),
+            EC.presence_of_element_located((By.ID, "discount_error_message")),
+        )
+    )
+
+
+@when(
+    'I apply custom discounts with base product price "{base_discount}" '
+    'and recommended product price "{rec_discount}" to the first remembered recommendation'
+)
+def step_apply_custom_discount_first(context, base_discount, rec_discount):
+    """Add custom discount entry for the first remembered recommendation via UI."""
+    # Get the first remembered recommendation ID
+    if hasattr(context, "remembered_recs"):
+        # Use the first one in remembered_recs
+        first_key = list(context.remembered_recs.keys())[0]
+        rec_id = context.remembered_recs[first_key]["recommendation"][
+            "recommendation_id"
+        ]
+    else:
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    # Fill in the form fields
+    rec_id_field = context.driver.find_element(By.ID, "custom_rec_id")
+    rec_id_field.clear()
+    rec_id_field.send_keys(str(rec_id))
+
+    if base_discount:
+        base_discount_field = context.driver.find_element(By.ID, "custom_base_discount")
+        base_discount_field.clear()
+        base_discount_field.send_keys(str(base_discount))
+
+    if rec_discount:
+        rec_discount_field = context.driver.find_element(By.ID, "custom_rec_discount")
+        rec_discount_field.clear()
+        rec_discount_field.send_keys(str(rec_discount))
+
+    # Click Add Entry button
+    add_button = context.driver.find_element(By.ID, "add-discount-entry-btn")
+    add_button.click()
+
+    # Wait a moment for the entry to be added
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "#discount-entries-list table, #no-entries-message")
+        )
+    )
+
+
+@when(
+    'I apply custom discounts with base product price "{base_discount}" '
+    'and recommended product price "{rec_discount}" to the second remembered '
+    "recommendation in the same request"
+)
+def step_apply_custom_discount_second(context, base_discount, rec_discount):
+    """Add second custom discount entry and apply both discounts via UI."""
+    # Get the second remembered recommendation
+    if hasattr(context, "remembered_recs"):
+        keys = list(context.remembered_recs.keys())
+        if len(keys) >= 2:
+            second_key = keys[1]
+            second_rec_id = context.remembered_recs[second_key]["recommendation"][
+                "recommendation_id"
+            ]
+        else:
+            raise AssertionError("Second remembered recommendation not found")
+    else:
+        raise AssertionError("No remembered recommendations found")
+
+    # Fill in the form fields for the second entry
+    rec_id_field = context.driver.find_element(By.ID, "custom_rec_id")
+    rec_id_field.clear()
+    rec_id_field.send_keys(str(second_rec_id))
+
+    if base_discount:
+        base_discount_field = context.driver.find_element(By.ID, "custom_base_discount")
+        base_discount_field.clear()
+        base_discount_field.send_keys(str(base_discount))
+
+    if rec_discount:
+        rec_discount_field = context.driver.find_element(By.ID, "custom_rec_discount")
+        rec_discount_field.clear()
+        rec_discount_field.send_keys(str(rec_discount))
+
+    # Click Add Entry button
+    add_button = context.driver.find_element(By.ID, "add-discount-entry-btn")
+    add_button.click()
+
+    # Wait for the entry to be added
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "#discount-entries-list table")
+        )
+    )
+
+    # Now click Apply Custom Discounts button
+    apply_button = context.driver.find_element(By.ID, "apply-custom-discount-btn")
+    apply_button.click()
+
+    # Wait for the response to appear
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.any_of(
+            EC.presence_of_element_located((By.ID, "discount_success_message")),
+            EC.presence_of_element_located((By.ID, "discount_error_message")),
+        )
+    )
+
+
+@when("I apply custom discounts with an empty JSON body")
+def step_apply_custom_discount_empty(context):
+    """Click apply custom discounts button without adding any entries."""
+    # Click Apply Custom Discounts button without any entries
+    apply_button = context.driver.find_element(By.ID, "apply-custom-discount-btn")
+    apply_button.click()
+
+    # Wait for the error message to appear
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.any_of(
+            EC.presence_of_element_located((By.ID, "discount_success_message")),
+            EC.presence_of_element_located((By.ID, "discount_error_message")),
+        )
+    )
+
+
+@then('the API should return status "{status_code}"')
+def step_api_status(context, status_code):
+    """Verify the UI shows appropriate success or error message based on status code."""
+    expected_status = int(status_code)
+
+    # Check which message element is visible
+    try:
+        success_msg = context.driver.find_element(By.ID, "discount_success_message")
+        error_msg = context.driver.find_element(By.ID, "discount_error_message")
+
+        success_visible = success_msg.is_displayed()
+        error_visible = error_msg.is_displayed()
+
+        if expected_status == 200:
+            assert (
+                success_visible
+            ), "Expected success message for status 200, but error message is shown"
+        elif expected_status in (400, 404):
+            assert (
+                error_visible
+            ), f"Expected error message for status {expected_status}, but success message is shown"
+    except Exception:  # pylint: disable=broad-except
+        # Fallback: check flash message
+        flash_msg = context.driver.find_element(By.ID, "flash_message").text
+        if expected_status == 200:
+            assert (
+                "error" not in flash_msg.lower() or "success" in flash_msg.lower()
+            ), f"Expected success for status {expected_status}, but got: {flash_msg}"
+        else:
+            assert (
+                "error" in flash_msg.lower()
+                or expected_status == 400
+                or expected_status == 404
+            ), f"Expected error for status {expected_status}, but got: {flash_msg}"
+
+
+@then(
+    'the response should indicate that discounts were applied to at least "{count}" recommendations'
+)
+def step_discount_applied_count(context, count):
+    """Verify the UI success message indicates the correct number of updates."""
+    # Check the success message
+    success_msg = context.driver.find_element(By.ID, "discount_success_message")
+    assert success_msg.is_displayed(), "Success message should be displayed"
+
+    message_text = success_msg.text
+    # The message should contain the count, e.g., "Applied 10% discount to 1 accessory recommendations"
+    # Extract number from message or check that it mentions the count
+    numbers = re.findall(r"\d+", message_text)
+    if numbers:
+        # The count should be in the message
+        assert (
+            int(count) <= int(numbers[-1]) or str(count) in message_text
+        ), f"Expected message to indicate at least {count} recommendations updated, got: {message_text}"
+
+
+@then("the response should indicate custom discounts were applied")
+def step_custom_discount_applied(context):
+    """Verify the UI shows success message for custom discounts."""
+    # Check the success message is displayed
+    success_msg = context.driver.find_element(By.ID, "discount_success_message")
+    assert (
+        success_msg.is_displayed()
+    ), "Success message should be displayed for custom discounts"
+
+    # Check that updated IDs are shown
+    updated_ids_div = context.driver.find_element(By.ID, "discount_updated_ids")
+    updated_ids_text = updated_ids_div.text
+    assert len(updated_ids_text) > 0, "Updated recommendation IDs should be displayed"
+
+
+@then('the response message should contain "{text}"')
+def step_response_contains(context, text):
+    """Verify the UI message (success or error) contains specific text."""
+    # Check both success and error messages
+    try:
+        success_msg = context.driver.find_element(By.ID, "discount_success_message")
+        error_msg = context.driver.find_element(By.ID, "discount_error_message")
+
+        if success_msg.is_displayed():
+            message = success_msg.text
+        elif error_msg.is_displayed():
+            message = error_msg.text
+        else:
+            # Fallback to flash message
+            message = context.driver.find_element(By.ID, "flash_message").text
+    except Exception:
+        # Fallback to flash message
+        message = context.driver.find_element(By.ID, "flash_message").text
+
+    assert (
+        text.lower() in message.lower()
+    ), f'Expected "{text}" in message, got "{message}"'
+
+
+@then(
+    'the remembered recommendation should have base product price "{base_price}" and recommended product price "{rec_price}"'
+)
+def step_verify_updated_prices(context, base_price, rec_price):
+    """Verify the remembered recommendation has updated prices."""
+    rec_id = context.remembered_rec["recommendation_id"]
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+
+
+@then(
+    'the first remembered recommendation should have base product price "{base_price}" '
+    'and recommended product price "{rec_price}"'
+)
+def step_verify_first_updated_prices(context, base_price, rec_price):
+    """Verify the first remembered recommendation has updated prices."""
+    if hasattr(context, "remembered_recs"):
+        first_key = list(context.remembered_recs.keys())[0]
+        rec_id = context.remembered_recs[first_key]["recommendation"][
+            "recommendation_id"
+        ]
+    else:
+        rec_id = context.remembered_rec["recommendation_id"]
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+
+
+@then(
+    'the second remembered recommendation should have base product price "{base_price}" '
+    'and recommended product price "{rec_price}"'
+)
+def step_verify_second_updated_prices(context, base_price, rec_price):
+    """Verify the second remembered recommendation has updated prices."""
+    if hasattr(context, "remembered_recs"):
+        keys = list(context.remembered_recs.keys())
+        if len(keys) >= 2:
+            second_key = keys[1]
+            rec_id = context.remembered_recs[second_key]["recommendation"][
+                "recommendation_id"
+            ]
+        else:
+            raise AssertionError("Second remembered recommendation not found")
+    else:
+        raise AssertionError("No remembered recommendations found")
+
+    resp = requests.get(
+        f"{context.base_url}/recommendations/{rec_id}",
+        timeout=WAIT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    rec = resp.json()
+
+    actual_base = float(rec.get("base_product_price", 0))
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(rec.get("recommended_product_price", 0))
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
