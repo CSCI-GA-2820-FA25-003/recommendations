@@ -38,9 +38,9 @@ PUT    /api/recommendations/apply_discount
 """
 from decimal import Decimal, InvalidOperation
 
-from flask import jsonify, request, abort, url_for
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
-from flask_restx import Api, Resource, fields, reqparse, inputs
+from flask_restx import Api, Resource, fields, reqparse
 
 from service.common import status  # HTTP Status Codes
 from service.models import (
@@ -514,10 +514,6 @@ class DiscountResource(Resource):
 ######################################################################
 #  U T I L I T Y   F U N C T I O N S
 ######################################################################
-def abort(error_code: int, message: str):
-    """Logs errors before aborting via Flask-RESTX"""
-    app.logger.error(message)
-    api.abort(error_code, message)
 
 
 ######################################################################
