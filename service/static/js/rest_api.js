@@ -506,4 +506,254 @@ $(function () {
     //         handleAjaxFail(res, "Unable to list recommendations");
     //     });
     // });
+
+    // ============================================================
+    // DISCOUNT APPLICATION HANDLERS
+    // ============================================================
+
+    function validateDiscountPercent(value) {
+        const num = Number(value);
+        if (Number.isNaN(num)) {
+            return { error: "Discount must be a number" };
+        }
+        if (num <= 0 || num >= 100) {
+            return { error: "Discount must be between 0 and 100" };
+        }
+        return { value: num };
+    }
+
+    function showDiscountSuccess(message, updatedIds) {
+        $("#discount_results").show();
+        $("#discount_success_message").text(message).show();
+        $("#discount_error_message").hide();
+        
+        if (updatedIds && updatedIds.length > 0) {
+            let idsHtml = "<strong>Updated Recommendation IDs:</strong><ul>";
+            updatedIds.forEach(function(id) {
+                idsHtml += "<li>" + escapeHtml(id) + "</li>";
+            });
+            idsHtml += "</ul>";
+            $("#discount_updated_ids").html(idsHtml);
+        } else {
+            $("#discount_updated_ids").empty();
+        }
+        
+        flash_message(message);
+    }
+
+    function showDiscountError(message) {
+        $("#discount_results").show();
+        $("#discount_error_message").text(message).show();
+        $("#discount_success_message").hide();
+        $("#discount_updated_ids").empty();
+        flash_message(message);
+    }
+
+    function hideDiscountResults() {
+        $("#discount_results").hide();
+        $("#discount_success_message").hide();
+        $("#discount_error_message").hide();
+        $("#discount_updated_ids").empty();
+    }
+
+    // === Apply Flat Discount ===
+    $("#apply-flat-discount-btn").click(function (event) {
+        event.preventDefault();
+        $("#flash_message").empty();
+        hideDiscountResults();
+
+        const discountValue = trimmedValue("#flat_discount");
+        if (!discountValue) {
+            showDiscountError("Discount percentage is required");
+            return;
+        }
+
+        const discountResult = validateDiscountPercent(discountValue);
+        if (discountResult.error) {
+            showDiscountError(discountResult.error);
+            return;
+        }
+
+        const url = API_BASE_URL + "/apply_discount?discount=" + encodeURIComponent(discountResult.value);
+
+        const ajax = $.ajax({
+            type: "PUT",
+            url: url,
+            contentType: "application/json",
+        });
+
+        ajax.done(function (res) {
+            const message = res.message || "Discount applied successfully";
+            const updatedIds = res.updated_ids || [];
+            showDiscountSuccess(message, updatedIds);
+        });
+
+        ajax.fail(function (res) {
+            const errorMsg = extract_error(res, "Unable to apply discount");
+            showDiscountError(errorMsg);
+        });
+    });
+
+    // === Custom Discount Entries Management ===
+    let discountEntries = [];
+
+    function renderDiscountEntries() {
+        const container = $("#discount-entries-list");
+
+        if (discountEntries.length === 0) {
+            container.html('<p class="text-muted" id="no-entries-message">No discount entries added yet. Add entries above.</p>');
+            return;
+        }
+        let html = '<table class="table table-bordered table-striped">';
+        html += '<thead><tr>';
+        html += '<th>Recommendation ID</th>';
+        html += '<th>Base Product Discount (%)</th>';
+        html += '<th>Recommended Product Discount (%)</th>';
+        html += '<th>Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        discountEntries.forEach(function(entry, index) {
+            html += '<tr data-index="' + index + '">';
+            html += '<td>' + escapeHtml(entry.recId) + '</td>';
+            html += '<td>' + (entry.baseDiscount !== undefined ? escapeHtml(entry.baseDiscount) + '%' : '<em class="text-muted">Not set</em>') + '</td>';
+            html += '<td>' + (entry.recDiscount !== undefined ? escapeHtml(entry.recDiscount) + '%' : '<em class="text-muted">Not set</em>') + '</td>';
+            html += '<td><button type="button" class="btn btn-sm btn-danger remove-entry-btn" data-index="' + index + '">Remove</button></td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.html(html);
+
+        // Attach remove handlers
+        $(".remove-entry-btn").click(function() {
+            const index = parseInt($(this).data("index"), 10);
+            discountEntries.splice(index, 1);
+            renderDiscountEntries();
+        });
+    }
+
+    function clearDiscountForm() {
+        $("#custom_rec_id").val("");
+        $("#custom_base_discount").val("");
+        $("#custom_rec_discount").val("");
+    }
+
+    // === Add Discount Entry ===
+    $("#add-discount-entry-btn").click(function (event) {
+        event.preventDefault();
+
+        const recId = trimmedValue("#custom_rec_id");
+        if (!recId) {
+            flash_message("Recommendation ID is required");
+            return;
+        }
+
+        const recIdNum = parseInt(recId, 10);
+        if (Number.isNaN(recIdNum) || recIdNum < 1) {
+            flash_message("Recommendation ID must be a positive integer");
+            return;
+        }
+
+        // Check if this ID already exists
+        if (discountEntries.some(function(e) { return e.recId === recId; })) {
+            flash_message("This recommendation ID already exists in the list");
+            return;
+        }
+
+        const baseDiscountValue = trimmedValue("#custom_base_discount");
+        const recDiscountValue = trimmedValue("#custom_rec_discount");
+
+        if (!baseDiscountValue && !recDiscountValue) {
+            flash_message("At least one discount value (base or recommended) is required");
+            return;
+        }
+
+        const entry = {
+            recId: recId,
+            baseDiscount: undefined,
+            recDiscount: undefined
+        };
+
+        if (baseDiscountValue) {
+            const baseResult = validateDiscountPercent(baseDiscountValue);
+            if (baseResult.error) {
+                flash_message("Base product discount: " + baseResult.error);
+                return;
+            }
+            entry.baseDiscount = baseResult.value;
+        }
+
+        if (recDiscountValue) {
+            const recResult = validateDiscountPercent(recDiscountValue);
+            if (recResult.error) {
+                flash_message("Recommended product discount: " + recResult.error);
+                return;
+            }
+            entry.recDiscount = recResult.value;
+        }
+
+        discountEntries.push(entry);
+        renderDiscountEntries();
+        clearDiscountForm();
+        flash_message("Entry added successfully");
+    });
+
+    // === Clear All Entries ===
+    $("#clear-discount-entries-btn").click(function (event) {
+        event.preventDefault();
+        if (discountEntries.length === 0) {
+            flash_message("No entries to clear");
+            return;
+        }
+        if (confirm("Are you sure you want to clear all discount entries?")) {
+            discountEntries = [];
+            renderDiscountEntries();
+            clearDiscountForm();
+            flash_message("All entries cleared");
+        }
+    });
+
+    // === Apply Custom Discounts ===
+    $("#apply-custom-discount-btn").click(function (event) {
+        event.preventDefault();
+        $("#flash_message").empty();
+        hideDiscountResults();
+
+        // Convert entries array to JSON format expected by API
+        // Allow empty object to be sent so server can return proper error message
+        const discountMappings = {};
+        discountEntries.forEach(function(entry) {
+            const discountObj = {};
+            if (entry.baseDiscount !== undefined) {
+                discountObj.base_product_price = entry.baseDiscount;
+            }
+            if (entry.recDiscount !== undefined) {
+                discountObj.recommended_product_price = entry.recDiscount;
+            }
+            discountMappings[entry.recId] = discountObj;
+        });
+
+        const url = API_BASE_URL + "/apply_discount";
+
+        const ajax = $.ajax({
+            type: "PUT",
+            url: url,
+            contentType: "application/json",
+            data: JSON.stringify(discountMappings),
+        });
+
+        ajax.done(function (res) {
+            const message = res.message || "Custom discounts applied successfully";
+            const updatedIds = res.updated_ids || [];
+            showDiscountSuccess(message, updatedIds);
+            // Optionally clear entries after successful application
+            // discountEntries = [];
+            // renderDiscountEntries();
+        });
+
+        ajax.fail(function (res) {
+            const errorMsg = extract_error(res, "Unable to apply custom discounts");
+            showDiscountError(errorMsg);
+        });
+    });
 });
