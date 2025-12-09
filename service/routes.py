@@ -33,10 +33,14 @@ from service.models import (
 )
 
 
+API_PREFIX = "/api"
+
+
 ######################################################################
 # GET INDEX
 ######################################################################
-@app.route("/")
+@app.route(API_PREFIX)
+@app.route(f"{API_PREFIX}/")
 def index():
     """Root URL response"""
     app.logger.info("Request for Root URL")
@@ -46,7 +50,7 @@ def index():
             version="1.0",
             message="Welcome to the Recommendation Service! See docs at /apidocs.",
             docs="/apidocs",
-            list_url="/recommendations",
+            list_url=f"{API_PREFIX}/recommendations",
         ),
         status.HTTP_200_OK,
     )
@@ -69,7 +73,7 @@ def serve_ui():
 ######################################################################
 # CREATE A NEW RECOMMENDATION
 ######################################################################
-@app.route("/recommendations", methods=["POST"])
+@app.route(f"{API_PREFIX}/recommendations", methods=["POST"])
 def create_recommendations():
     """
     Create a Recommendation
@@ -103,13 +107,13 @@ def create_recommendations():
 #####################################################################
 # UPDATE AN EXISTING RECOMMENDATION
 ######################################################################
-@app.route("/recommendations/<int:recommendation_id>", methods=["PUT"])
+@app.route(f"{API_PREFIX}/recommendations/<int:recommendation_id>", methods=["PUT"])
 def update_recommendation(recommendation_id: int):
     """
     Update an existing recommendation's editable fields.
 
     Endpoint:
-        PUT /recommendations/<recommendation_id>
+        PUT /api/recommendations/<recommendation_id>
 
     Request Body (application/json):
         {
@@ -147,7 +151,7 @@ def update_recommendation(recommendation_id: int):
 #####################################################################
 # DELETE A RECOMMENDATION
 ######################################################################
-@app.route("/recommendations/<int:recommendation_id>", methods=["DELETE"])
+@app.route(f"{API_PREFIX}/recommendations/<int:recommendation_id>", methods=["DELETE"])
 def delete_recommendations(recommendation_id):
     """
     Delete a Recommendation
@@ -171,7 +175,7 @@ def delete_recommendations(recommendation_id):
 #####################################################################
 # READ A Recommendation
 ######################################################################
-@app.route("/recommendations/<int:recommendation_id>", methods=["GET"])
+@app.route(f"{API_PREFIX}/recommendations/<int:recommendation_id>", methods=["GET"])
 def get_recommendations(recommendation_id):
     """
     Retrieve a single Recommendation
@@ -197,7 +201,7 @@ def get_recommendations(recommendation_id):
 ######################################################################
 # LIST RECOMMENDATIONS - Multiple Filters
 ######################################################################
-@app.route("/recommendations", methods=["GET"])
+@app.route(f"{API_PREFIX}/recommendations", methods=["GET"])
 def list_recommendations():
     """Returns recommendations
     Supported query params (all optional, and can be combined):
@@ -251,18 +255,18 @@ def list_recommendations():
 ######################################################################
 # APPLY DISCOUNT (NON-CRUD ACTION)
 ######################################################################
-@app.route("/recommendations/apply_discount", methods=["PUT"])
+@app.route(f"{API_PREFIX}/recommendations/apply_discount", methods=["PUT"])
 def apply_discount():
     """
     Apply discounts to recommendation prices.
 
     Modes:
       1) Flat mode (query string):
-         PUT /recommendations/apply_discount?discount=10
+         PUT /api/recommendations/apply_discount?discount=10
          - Applies the same percentage to all accessory recommendations.
          - Only updates price fields that are non-null.
       2) Custom mode (JSON body):
-         PUT /recommendations/apply_discount
+         PUT /api/recommendations/apply_discount
          Content-Type: application/json
          {
            "<recommendation_id>": {
@@ -382,7 +386,7 @@ def check_content_type(content_type) -> None:
 ######################################################################
 
 
-@app.route("/health", methods=["GET"])
+@app.route(f"{API_PREFIX}/health", methods=["GET"])
 def health():
     """Health check endpoint for Kubernetes probes"""
     app.logger.info("Health check requested")

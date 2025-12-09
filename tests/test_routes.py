@@ -31,7 +31,8 @@ from .factories import RecommendationFactory
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
-BASE_URL = "/recommendations"
+API_PREFIX = "/api"
+BASE_URL = f"{API_PREFIX}/recommendations"
 DISCOUNT_URL = f"{BASE_URL}/apply_discount"
 
 
@@ -92,7 +93,7 @@ class TestYourResourceService(TestCase):
 
     def test_index(self):
         """It should return a helpful message"""
-        resp = self.client.get("/")
+        resp = self.client.get(API_PREFIX)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         data = resp.get_json()
         self.assertIn("message", data)
@@ -878,7 +879,7 @@ class TestYourResourceService(TestCase):
     # ----------------------------------------------------------
     def test_health_endpoint(self):
         """It should return 200 OK for health check"""
-        resp = self.client.get("/health")
+        resp = self.client.get(f"{API_PREFIX}/health")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         data = resp.get_json()
         self.assertIsNotNone(data)

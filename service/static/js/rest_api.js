@@ -1,5 +1,5 @@
 $(function () {
-    const API_BASE_URL = "/recommendations";
+    const API_BASE_URL = "/api/recommendations";
     const VALID_REC_TYPES = ["cross-sell", "up-sell", "accessory"];
     const VALID_STATUSES = ["active", "inactive"];
 
@@ -446,10 +446,10 @@ $(function () {
 
         let url = API_BASE_URL;
         if (params.length > 0) {
-            // filter -> /recommendations?...
+            // filter -> /api/recommendations?...
             url = API_BASE_URL + "?" + params.join("&");
         }
-        // emty params  →  GET /recommendations （query all）
+        // empty params  →  GET /api/recommendations （query all）
 
         const ajax = $.ajax({
             type: "GET",
@@ -492,7 +492,7 @@ $(function () {
 
     //     const ajax = $.ajax({
     //         type: "GET",
-    //         url: API_BASE_URL,          // GET /recommendations (no filters)
+    //         url: API_BASE_URL,          // GET /api/recommendations (no filters)
     //         contentType: "application/json",
     //     });
 

@@ -124,7 +124,7 @@ The following section provides **example API calls**, including request and resp
 ### Root Endpoint
 
 ```
-GET /
+GET /api
 → 200 OK
 ```
 Returns a simple landing page text.
@@ -135,7 +135,7 @@ Returns a simple landing page text.
 
 #### Example Request
 ```http
-POST /recommendations
+POST /api/recommendations
 Content-Type: application/json
 
 {
@@ -154,7 +154,7 @@ Content-Type: application/json
 #### Example Response
 ```http
 201 Created
-Location: /recommendations/1
+Location: /api/recommendations/1
 
 {
   "id": 1,
@@ -172,7 +172,7 @@ Location: /recommendations/1
 
 #### Example Request
 ```http
-GET /recommendations/1
+GET /api/recommendations/1
 ```
 
 #### Example Response
@@ -195,7 +195,7 @@ GET /recommendations/1
 
 #### Example Request
 ```http
-PUT /recommendations/1
+PUT /api/recommendations/1
 Content-Type: application/json
 
 {
@@ -224,7 +224,7 @@ Content-Type: application/json
 
 #### Example Request
 ```http
-DELETE /recommendations/1
+DELETE /api/recommendations/1
 ```
 
 #### Example Response
@@ -238,7 +238,7 @@ DELETE /recommendations/1
 
 #### Example Request
 ```http
-GET /recommendations
+GET /api/recommendations
 ```
 
 #### Example Response

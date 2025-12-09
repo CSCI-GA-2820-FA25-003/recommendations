@@ -15,6 +15,7 @@ HTTP_409_CONFLICT = 409
 HTTP_404_NOT_FOUND = 404
 
 WAIT_TIMEOUT = 60
+API_PREFIX = "/api"
 
 
 def _wait_for_text(context, locator, text):
@@ -31,7 +32,9 @@ def _field_value(context, element_id):
 
 @given("the recommendation service is running")
 def step_service_running(context):
-    resp = requests.get(f"{context.base_url}/health", timeout=WAIT_TIMEOUT)
+    resp = requests.get(
+        f"{context.base_url}{API_PREFIX}/health", timeout=WAIT_TIMEOUT
+    )
     assert resp.status_code == HTTP_200_OK
 
 
@@ -48,7 +51,7 @@ def step_open_home_page(context):
 @given("the following recommendations exist")
 def step_seed_recommendations(context):
     """Create the recommendations listed in the Background table."""
-    rest_endpoint = f"{context.base_url}/recommendations"
+    rest_endpoint = f"{context.base_url}{API_PREFIX}/recommendations"
     for row in context.table:
         payload = {
             "base_product_id": int(row["base_product_id"]),
@@ -82,7 +85,7 @@ def step_seed_recommendations(context):
 def step_remember_recommendation(context, base_id, rec_id):
     """Fetch and store a recommendation id matching the given base/recommended ids."""
     resp = requests.get(
-        f"{context.base_url}/recommendations",
+        f"{context.base_url}{API_PREFIX}/recommendations",
         params={"base_product_id": int(base_id)},
         timeout=WAIT_TIMEOUT,
     )
@@ -203,7 +206,7 @@ def step_verify_updated_recommendation(context, rec_type, status, confidence):
     assert rec_id is not None, "No recommendation id available for verification"
 
     resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
+        f"{context.base_url}{API_PREFIX}/recommendations/{rec_id}",
         timeout=WAIT_TIMEOUT,
     )
     resp.raise_for_status()
@@ -230,7 +233,7 @@ def step_verify_updated_recommendation(context, rec_type, status, confidence):
 def step_have_recommendation(context, base_id, rec_id):
     """Fetch and store a recommendation id matching the given base/recommended ids."""
     resp = requests.get(
-        f"{context.base_url}/recommendations",
+        f"{context.base_url}{API_PREFIX}/recommendations",
         params={"base_product_id": int(base_id)},
         timeout=WAIT_TIMEOUT,
     )
@@ -282,7 +285,7 @@ def step_remembered_recommendation_should_not_exist(context):
     assert rec_id is not None, "No recommendation id remembered in context"
 
     resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
+        f"{context.base_url}{API_PREFIX}/recommendations/{rec_id}",
         timeout=WAIT_TIMEOUT,
     )
     assert (
