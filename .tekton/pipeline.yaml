@@ -50,11 +50,9 @@ spec:
           value: '1'
         - name: SPARSE_CHECKOUT_DIRECTORIES
           value: ''
-      taskRef:
-        params:
-          kind: Task
-          name: git-clone
-        resolver: cluster
+      taskRef:        
+        kind: Task
+        name: git-clone        
       workspaces:
         - name: output
           workspace: pipeline-workspace
