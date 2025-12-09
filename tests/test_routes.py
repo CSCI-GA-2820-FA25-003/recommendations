@@ -874,6 +874,7 @@ class TestYourResourceService(TestCase):
         # should be HTML content
         self.assertIn("text/html", response.content_type)
 
+    # ----------------------------------------------------------
     # TEST HEALTH ENDPOINT
     # ----------------------------------------------------------
     def test_health_endpoint(self):
@@ -883,3 +884,50 @@ class TestYourResourceService(TestCase):
         data = resp.get_json()
         self.assertIsNotNone(data)
         self.assertEqual(data.get("status"), "OK")
+
+    ########################################################################
+    #              Test JSON error handling in Flask-RESTX
+    ########################################################################
+
+    #  ----------- 400 – Bad Request / DataValidationError ------------
+    def test_create_recommendation_with_invalid_body_returns_400_json(self):
+        """POST with invalid or incomplete JSON should return 400 JSON (no HTML error page)"""
+
+        invalid_body = {
+            "name": "invalid-only-name",  # intentionally missing required fields
+        }
+
+        resp = self.client.post(
+            BASE_URL,
+            json=invalid_body,
+            content_type="application/json",
+        )
+
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        # Must be JSON, not default HTML
+        assert resp.content_type == "application/json"
+
+        data = resp.get_json()
+        assert isinstance(data, dict)
+        # We only require a human-readable message in the JSON payload
+        assert "message" in data
+        # Make sure we did not accidentally return an HTML error page
+        assert "<!doctype html" not in resp.get_data(as_text=True).lower()
+
+    #  --------------------- Not found ----------------------
+
+    def test_get_nonexistent_recommendation_returns_404_json(self):
+        """GET on a non-existing recommendation id should return 404 JSON, not HTML"""
+
+        # Use an id that is very unlikely to exist
+        resp = self.client.get(f"{BASE_URL}/999999")
+
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+        assert resp.content_type == "application/json"
+
+        data = resp.get_json()
+        assert isinstance(data, dict)
+        # Flask-RESTX default abort() puts the human-readable text in "message"
+        assert "message" in data
+        assert "not found" in data["message"].lower()
+        assert "<!doctype html" not in resp.get_data(as_text=True).lower()
