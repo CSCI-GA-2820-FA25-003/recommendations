@@ -144,6 +144,91 @@
       </div> <!-- end well -->
     </div> <!-- end Form -->
 
+    <!-- Discount Application Section -->
+    <div class="col-md-12" id="discount_section">
+      <h3>Apply Discounts to Recommendations:</h3>
+      <div class="well">
+        <!-- Flat Discount Mode -->
+        <div class="panel panel-primary">
+          <div class="panel-heading">
+            <h4 class="panel-title">Apply Flat Discount to All Accessory Recommendations</h4>
+          </div>
+          <div class="panel-body">
+            <div class="form-horizontal">
+              <div class="form-group">
+                <label class="control-label col-sm-3" for="flat_discount">Discount Percentage:</label>
+                <div class="col-sm-4">
+                  <input type="number" class="form-control" id="flat_discount" min="0" max="99.99" step="0.01"
+                    placeholder="Enter discount (0-100)">
+                  <small class="help-block">Enter a discount percentage between 0 and 100 (exclusive)</small>
+                </div>
+                <div class="col-sm-5">
+                  <button type="submit" class="btn btn-primary" id="apply-flat-discount-btn">Apply Flat Discount</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Discount Mode -->
+        <div class="panel panel-info">
+          <div class="panel-heading">
+            <h4 class="panel-title">Apply Custom Per-Recommendation Discounts</h4>
+          </div>
+          <div class="panel-body">
+            <!-- Add New Discount Entry Form -->
+            <div class="form-horizontal" id="add-discount-form">
+              <div class="form-group">
+                <label class="control-label col-sm-2" for="custom_rec_id">Recommendation ID:</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_rec_id" placeholder="Enter ID" min="1">
+                </div>
+                <label class="control-label col-sm-2" for="custom_base_discount">Base Product Discount (%):</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_base_discount" min="0" max="99.99" step="0.01" placeholder="0-100">
+                </div>
+                <div class="col-sm-2">
+                  <button type="button" class="btn btn-success" id="add-discount-entry-btn">Add Entry</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="control-label col-sm-2" for="custom_rec_discount">Recommended Product Discount (%):</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_rec_discount" min="0" max="99.99" step="0.01" placeholder="0-100">
+                </div>
+                <div class="col-sm-7">
+                  <small class="help-block">Enter at least one discount value (base and/or recommended). Discounts must be between 0 and 100 (exclusive).</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Discount Entries List -->
+            <div id="discount-entries-container" style="margin-top: 20px;">
+              <h5>Discount Entries:</h5>
+              <div id="discount-entries-list">
+                <p class="text-muted" id="no-entries-message">No discount entries added yet. Add entries above.</p>
+              </div>
+            </div>
+
+            <!-- Apply Button -->
+            <div class="form-group" style="margin-top: 20px;">
+              <div class="col-sm-12">
+                <button type="submit" class="btn btn-info" id="apply-custom-discount-btn">Apply Custom Discounts</button>
+                <button type="button" class="btn btn-default" id="clear-discount-entries-btn">Clear All Entries</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discount Results -->
+        <div id="discount_results" style="display: none;">
+          <div class="alert alert-success" id="discount_success_message"></div>
+          <div class="alert alert-danger" id="discount_error_message" style="display: none;"></div>
+          <div id="discount_updated_ids"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Search Results -->
     <div class="table-responsive col-md-12" id="search_results">
       <table class="table table-striped">

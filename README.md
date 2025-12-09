@@ -37,7 +37,11 @@ flask run -h 0.0.0.0 -p 8080
 ```
 
 The service will be available at:  
-👉 **http://localhost:8080**
+**http://localhost:8080**
+
+Interactive API documentation (Swagger UI) is served at:  
+**http://localhost:8080/apidocs**
+![alt text](image.png)
 
 ---
 
