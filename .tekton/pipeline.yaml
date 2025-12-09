@@ -38,9 +38,9 @@ spec:
           value: 'false'
         - name: SSL_VERIFY
           value: 'true'
-        - name: URL
+        - name: url
           value: $(params.GIT_REPO)
-        - name: REVISION
+        - name: revision
           value: $(params.GIT_REF)
         - name: REFSPEC
           value: ''
@@ -85,9 +85,9 @@ spec:
         - name: pytest-args
           value: []
         - name: secret-name
-          value: postgres-creds
+          value: db-secret
         - name: secret-key
-          value: database_uri
+          value: DATABASE_URI
       runAfter:
         - git-clone
       taskRef:
