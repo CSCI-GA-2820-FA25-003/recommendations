@@ -1,5 +1,5 @@
 $(function () {
-    const API_BASE_URL = "/recommendations";
+    const API_BASE_URL = "api/recommendations";
     const VALID_REC_TYPES = ["cross-sell", "up-sell", "accessory"];
     const VALID_STATUSES = ["active", "inactive"];
 
