@@ -52,12 +52,8 @@ spec:
           value: ''
       taskRef:
         params:
-          - name: kind
-            value: task
-          - name: name
-            value: git-clone
-          - name: namespace
-            value: openshift-pipelines
+          kind: Task
+          name: git-clone
         resolver: cluster
       workspaces:
         - name: output
