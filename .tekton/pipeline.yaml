@@ -58,9 +58,15 @@ spec:
           value: '1'
         - name: SPARSE_CHECKOUT_DIRECTORIES
           value: ''
-      taskRef:        
-        kind: Task
-        name: git-clone        
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
       workspaces:
         - name: output
           workspace: pipeline-workspace
