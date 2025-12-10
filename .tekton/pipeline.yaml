@@ -46,7 +46,7 @@ spec:
           value: 'false'
         - name: SSL_VERIFY
           value: 'true'
-        - name: url
+        - name: URL
           value: $(params.GIT_REPO)
         - name: revision
           value: $(params.GIT_REF)
