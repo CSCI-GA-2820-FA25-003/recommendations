@@ -1,0 +1,83 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: github-push-binding
+spec:
+  params:
+    - name: gitrepositoryurl
+      value: $(body.repository.clone_url)
+    - name: gitref
+      value: $(body.ref)
+    - name: commitsha
+      value: $(body.head_commit.id)
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: recommendations-trigger-template
+spec:
+  params:
+    - name: gitrepositoryurl
+      description: Repository that triggered the webhook event
+      type: string
+    - name: gitref
+      description: Git reference (branch or tag) that was pushed
+      type: string
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: recommendations-cd-
+      spec:
+        serviceAccountName: pipeline
+        pipelineRef:
+          name: recommendations-cd
+        params:
+          - name: GIT_REPO
+            value: $(tt.params.gitrepositoryurl)
+          - name: GIT_REF
+            value: $(tt.params.gitref)
+        workspaces:
+          - name: pipeline-workspace
+            persistentVolumeClaim:
+              claimName: pipeline-pvc
+
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: recommendations-github-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: github-push
+      interceptors:
+        - ref:
+            name: github
+            kind: ClusterInterceptor
+          params:
+            - name: secretRef
+              value:
+                secretName: github-webhook-secret
+                secretKey: webhook-secret
+            - name: eventTypes
+              value:
+                - push
+      bindings:
+        - ref: github-push-binding
+      template:
+        ref: recommendations-trigger-template
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: recommendations-listener
+spec:
+  to:
+    kind: Service
+    name: el-recommendations-github-listener
+  tls:
+    termination: edge

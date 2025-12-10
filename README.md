@@ -269,6 +269,62 @@ GET /api/recommendations
 
 ---
 
+## Tekton Trigger & EventListener Setup
+## Tekton Trigger & EventListener Setup
+
+To let GitHub push events automatically start the `recommendations-cd`
+pipeline, apply the trigger resources in `.tekton/triggers.yaml`.
+
+1. Create the secret that the GitHub interceptor uses:
+
+   ```bash
+   export WEBHOOK_SECRET=<choose-a-secret>
+   oc create secret generic github-webhook-secret \
+     --from-literal=webhook-secret=${WEBHOOK_SECRET}
+   ```
+
+2. Apply the trigger manifests (after the pipeline/tasks/workspace are already
+   created):
+
+   ```bash
+   oc apply -f .tekton/triggers.yaml
+   ```
+
+   This provision the `TriggerBinding`, `TriggerTemplate`,
+   `EventListener`, and an OpenShift Route named
+   `recommendations-listener`.
+
+3. Grab the public route that GitHub will call:
+
+   ```bash
+   oc get route recommendations-listener -o jsonpath='https://{.spec.host}/'
+   ```
+
+4. Configure a GitHub Webhook (Settings → Webhooks → Add webhook) using the URL
+   from step 3 and the same `${WEBHOOK_SECRET}`. Select the “Push events” trigger.
+
+Once set up, each push event submits a new `PipelineRun` with the proper repo
+URL and branch supplied via the TriggerBinding.
+
+---
+
+## Exposing the Service via Route
+
+To reach the Recommendation Service from outside the cluster, apply the
+OpenShift Route defined in `k8s/route.yaml`:
+
+```bash
+oc apply -f k8s/service.yaml   # ensures the Service exists
+oc apply -f k8s/route.yaml
+oc get route recommendations
+```
+
+The `HOST/PORT` column shows the public URL (e.g.
+`https://recommendations-<namespace>.<cluster-domain>/`). Use that address
+for external clients or health probes.
+
+---
+
 ## Data Model
 
 The `Recommendation` model is defined in `service/models.py` using SQLAlchemy.
