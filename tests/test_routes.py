@@ -931,3 +931,16 @@ class TestYourResourceService(TestCase):
         assert "message" in data
         assert "not found" in data["message"].lower()
         assert "<!doctype html" not in resp.get_data(as_text=True).lower()
+
+    def test_root_returns_admin_ui_page(self):
+        """It should return the Admin UI page at the root URL"""
+
+        # Act
+        resp = self.client.get("/")
+
+        # Assert
+        assert resp.status_code == status.HTTP_200_OK
+        # Make sure we are serving HTML instead of JSON
+        assert "text/html" in resp.content_type
+        # Basic sanity check that we got an HTML document back
+        assert b"<html" in resp.data
