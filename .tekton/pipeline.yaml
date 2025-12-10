@@ -4,7 +4,7 @@ metadata:
   name: recommendations-cd
 spec:
   params:
-    - default: 'https://github.com/CSCI-GA-2820-FA25-003/recommendations.git'
+    - default: "https://github.com/CSCI-GA-2820-FA25-003/recommendations.git"
       description: URL to the git repo
       name: GIT_REPO
       type: string
@@ -16,7 +16,7 @@ spec:
       description: Name of the application
       name: APP_NAME
       type: string
-    - default: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/$(params.APP_NAME):latest'
+    - default: "image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/$(params.APP_NAME):latest"
       description: The name of image to build
       name: IMAGE_NAME
       type: string
@@ -29,33 +29,33 @@ spec:
         - name: CRT_FILENAME
           value: ca-bundle.crt
         - name: HTTP_PROXY
-          value: ''
+          value: ""
         - name: HTTPS_PROXY
-          value: ''
+          value: ""
         - name: NO_PROXY
-          value: ''
+          value: ""
         - name: SUBDIRECTORY
-          value: ''
+          value: ""
         - name: USER_HOME
           value: /home/git
         - name: DELETE_EXISTING
-          value: 'true'
+          value: "true"
         - name: VERBOSE
-          value: 'false'
+          value: "false"
         - name: SSL_VERIFY
-          value: 'true'
+          value: "true"
         - name: URL
           value: $(params.GIT_REPO)
         - name: REVISION
           value: $(params.GIT_REF)
         - name: REFSPEC
-          value: ''
+          value: ""
         - name: SUBMODULES
-          value: 'true'
+          value: "true"
         - name: DEPTH
-          value: '1'
+          value: "1"
         - name: SPARSE_CHECKOUT_DIRECTORIES
-          value: ''
+          value: ""
       taskRef:
         params:
           - name: kind
@@ -64,7 +64,7 @@ spec:
             value: git-clone
           - name: namespace
             value: openshift-pipelines
-        resolver: cluster      
+        resolver: cluster
       workspaces:
         - name: output
           workspace: pipeline-workspace
@@ -74,7 +74,7 @@ spec:
     - name: pylint
       params:
         - name: image
-          value: 'quay.io/rofrano/python:3.11-slim'
+          value: "quay.io/rofrano/python:3.11-slim"
         - name: path
           value: service
         - name: args
@@ -89,9 +89,9 @@ spec:
       workspaces:
         - name: source
           workspace: pipeline-workspace
-#################################################
-#               task2-2: pytest                 #
-#################################################
+    #################################################
+    #               task2-2: pytest                 #
+    #################################################
     - name: pytest
       params:
         - name: pytest-args
@@ -160,5 +160,21 @@ spec:
 #################################################
 #               task5: behave                   #
 #################################################
+    - name: behave
+      params:
+        - name: base-url
+          value: "http://recommendations-susanlin-dev.apps.rm3.7wse.p1.openshiftapps.com"
+        - name: wait-seconds
+          value: "60"
+        - name: driver
+          value: chrome
+      runAfter:
+        - deploy-image
+      taskRef:
+        kind: Task
+        name: behave
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
   workspaces:
     - name: pipeline-workspace

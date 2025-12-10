@@ -6,6 +6,8 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.common.exceptions import TimeoutException
+import time
 
 
 def _wait_for_text(context, locator, text):
@@ -20,11 +22,26 @@ def _field_value(context, element_id):
     return context.driver.find_element(By.ID, element_id).get_attribute("value")
 
 
-def _ensure_on_home_page(context):
-    """Navigate to the UI home page if we are not already there."""
+def _ensure_on_home_page(context, retries: int = 3):
+    """Navigate to the UI home page and wait until it is ready."""
     home_url = f"{context.base_url}/ui"
-    if not context.driver.current_url.startswith(home_url):
-        context.driver.get(home_url)
+    last_error = None
+
+    for attempt in range(retries):
+        if not context.driver.current_url.startswith(home_url):
+            context.driver.get(home_url)
+
+        try:
+            WebDriverWait(context.driver, context.wait_seconds).until(
+                EC.presence_of_element_located((By.ID, "list-btn"))
+            )
+            WebDriverWait(context.driver, context.wait_seconds).until(
+                EC.presence_of_element_located((By.ID, "search_results"))
+            )
+            return
+        except TimeoutException as exc:
+            last_error = exc
+            time.sleep(1)
 
 
 def _wait_for_flash_message(context, expected_substring=None):
@@ -135,16 +152,24 @@ def _wait_and_parse_results(context):
 def _list_recommendations(context):
     """Click the List button via the UI and capture the table contents."""
     _ensure_on_home_page(context)
+
     existing_tables = context.driver.find_elements(
         By.CSS_SELECTOR, "#search_results table"
     )
     previous_table = existing_tables[0] if existing_tables else None
+
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.element_to_be_clickable((By.ID, "list-btn"))
+    )
     context.driver.find_element(By.ID, "list-btn").click()
+
     _wait_for_flash_message(context, "success")
+
     if previous_table is not None:
         WebDriverWait(context.driver, context.wait_seconds).until(
             EC.staleness_of(previous_table)
         )
+
     return _wait_and_parse_results(context)
 
 
