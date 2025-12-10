@@ -48,7 +48,7 @@ spec:
           value: 'true'
         - name: URL
           value: $(params.GIT_REPO)
-        - name: revision
+        - name: REVISION
           value: $(params.GIT_REF)
         - name: REFSPEC
           value: ''
