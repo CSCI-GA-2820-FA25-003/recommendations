@@ -14,6 +14,14 @@ spec:
       description: the reference (branch or ref)
       name: GIT_REF
       type: string
+    - default: recommendations
+      description: Name of the application
+      name: APP_NAME
+      type: string
+    - default: 'image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/$(params.APP_NAME):latest'
+      description: The name of image to build
+      name: IMAGE_NAME
+      type: string
 #################################################
 #               task1: git-clone                #
 #################################################
@@ -99,8 +107,35 @@ spec:
 #################################################
 #               task3: buildah                  #
 #################################################
-
-
+    - name: buildah
+      params:
+        - name: IMAGE
+          value: $(params.IMAGE_NAME)
+        - name: DOCKERFILE
+          value: .devcontainer/Dockerfile
+        - name: CONTEXT
+          value: .
+        - name: STORAGE_DRIVER
+          value: vfs
+        - name: FORMAT
+          value: oci
+        - name: TLS_VERIFY
+          value: "true"
+      runAfter:
+        - pylint
+        - pytest
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
 #################################################
 #               task4: deploy image             #
 #################################################
