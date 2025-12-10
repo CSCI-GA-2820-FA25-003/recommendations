@@ -1,19 +1,11 @@
 """Step definitions for recommendation UI feature."""
 
 import re
-import requests
 from behave import given, when, then  # pylint: disable=no-name-in-module
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
-
-# HTTP Return Codes
-HTTP_200_OK = 200
-HTTP_201_CREATED = 201
-HTTP_409_CONFLICT = 409
-HTTP_404_NOT_FOUND = 404
-
-WAIT_TIMEOUT = 60
 
 
 def _wait_for_text(context, locator, text):
@@ -28,10 +20,202 @@ def _field_value(context, element_id):
     return context.driver.find_element(By.ID, element_id).get_attribute("value")
 
 
+def _ensure_on_home_page(context):
+    """Navigate to the UI home page if we are not already there."""
+    home_url = f"{context.base_url}/ui"
+    if not context.driver.current_url.startswith(home_url):
+        context.driver.get(home_url)
+
+
+def _wait_for_flash_message(context, expected_substring=None):
+    """Wait until the flash message displays text (optionally matching a substring)."""
+
+    def _message_present(driver):
+        message = driver.find_element(By.ID, "flash_message").text.strip()
+        if not message:
+            return False
+        if expected_substring:
+            return expected_substring.lower() in message.lower()
+        return True
+
+    WebDriverWait(context.driver, context.wait_seconds).until(_message_present)
+    return context.driver.find_element(By.ID, "flash_message").text.strip()
+
+
+def _wait_for_results(context):
+    """Wait until the search results container renders either a table or text."""
+
+    def _results_available(driver):
+        container = driver.find_element(By.ID, "search_results")
+        if container.find_elements(By.TAG_NAME, "table"):
+            return True
+        return bool(container.text.strip())
+
+    WebDriverWait(context.driver, context.wait_seconds).until(_results_available)
+
+
+def _wait_for_discount_response(context):
+    """Wait until the discount success/error message is visible with text."""
+
+    def _response_visible(driver):
+        success = driver.find_element(By.ID, "discount_success_message")
+        error = driver.find_element(By.ID, "discount_error_message")
+        if success.is_displayed() and success.text.strip():
+            return True
+        if error.is_displayed() and error.text.strip():
+            return True
+        return False
+
+    WebDriverWait(context.driver, context.wait_seconds).until(_response_visible)
+
+
+def _set_input_value(context, element_id, value):
+    """Set the value of an input or textarea field."""
+    element = context.driver.find_element(By.ID, element_id)
+    element.clear()
+    if value is None:
+        return
+    text = str(value).strip()
+    if text:
+        element.send_keys(text)
+
+
+def _select_dropdown_value(context, element_id, value):
+    """Select a dropdown option by value (falling back to visible text)."""
+    if value is None:
+        return
+    text = str(value).strip()
+    if not text:
+        return
+    select_elem = Select(context.driver.find_element(By.ID, element_id))
+    try:
+        select_elem.select_by_value(text.lower())
+    except NoSuchElementException:
+        select_elem.select_by_visible_text(text)
+
+
+def _create_recommendation_from_row(context, row):
+    """Populate the form with values from a behave table row and submit via the UI."""
+    _set_input_value(context, "base_product_id", row.get("base_product_id"))
+    _set_input_value(
+        context, "recommended_product_id", row.get("recommended_product_id")
+    )
+    _select_dropdown_value(
+        context, "recommendation_type", row.get("recommendation_type")
+    )
+    _select_dropdown_value(context, "status", row.get("status"))
+    _set_input_value(context, "confidence_score", row.get("confidence_score"))
+    _set_input_value(context, "base_product_price", row.get("base_product_price"))
+    _set_input_value(
+        context, "recommended_product_price", row.get("recommended_product_price")
+    )
+    _set_input_value(
+        context,
+        "base_product_description",
+        row.get("base_product_description"),
+    )
+    _set_input_value(
+        context,
+        "recommended_product_description",
+        row.get("recommended_product_description"),
+    )
+
+    context.driver.find_element(By.ID, "create-btn").click()
+    _wait_for_flash_message(context, "created")
+
+
+def _wait_and_parse_results(context):
+    """Wait for the search results to be available and parse them."""
+    _wait_for_results(context)
+    results = _parse_search_results(context)
+    context.list_results = results
+    return results
+
+
+def _list_recommendations(context):
+    """Click the List button via the UI and capture the table contents."""
+    _ensure_on_home_page(context)
+    existing_tables = context.driver.find_elements(
+        By.CSS_SELECTOR, "#search_results table"
+    )
+    previous_table = existing_tables[0] if existing_tables else None
+    context.driver.find_element(By.ID, "list-btn").click()
+    _wait_for_flash_message(context, "success")
+    if previous_table is not None:
+        WebDriverWait(context.driver, context.wait_seconds).until(
+            EC.staleness_of(previous_table)
+        )
+    return _wait_and_parse_results(context)
+
+
+def _delete_all_recommendations(context):
+    """Delete all existing recommendations using the UI controls."""
+    existing = _list_recommendations(context)
+    if not existing:
+        return
+    for rec in existing:
+        _set_input_value(context, "recommendation_id", rec["recommendation_id"])
+        context.driver.find_element(By.ID, "delete-btn").click()
+        _wait_for_flash_message(context)
+    context.list_results = []
+
+
+def _find_recommendation(context, base_id, rec_id):
+    """Locate a recommendation in the results table by base and recommended ids."""
+    results = _list_recommendations(context)
+    for rec in results:
+        if str(rec.get("base_product_id")) == str(base_id) and str(
+            rec.get("recommended_product_id")
+        ) == str(rec_id):
+            return rec
+    raise AssertionError(
+        f"No recommendation found for base {base_id} and recommended {rec_id}"
+    )
+
+
+def _remember_record(context, base_id, record):
+    """Store a recommendation record for later steps."""
+    context.remembered_rec = record.copy()
+    if not hasattr(context, "remembered_recs"):
+        context.remembered_recs = {}
+    context.remembered_recs[str(base_id)] = record.copy()
+
+
+def _retrieve_recommendation_by_id(context, rec_id):
+    """Retrieve a recommendation via the UI and return the flash message text."""
+    _ensure_on_home_page(context)
+    _set_input_value(context, "recommendation_id", rec_id)
+    context.driver.find_element(By.ID, "retrieve-btn").click()
+    return _wait_for_flash_message(context)
+
+
+def _verify_prices_via_ui(context, rec_id, base_price, rec_price):
+    """Retrieve a record via the UI and assert the stored prices."""
+    message = _retrieve_recommendation_by_id(context, rec_id)
+    assert (
+        "success" in message.lower()
+    ), "Failed to retrieve recommendation for price check"
+
+    actual_base = float(_field_value(context, "base_product_price") or 0)
+    expected_base = float(base_price)
+    assert (
+        abs(actual_base - expected_base) < 0.01
+    ), f"Expected base_product_price {expected_base}, got {actual_base}"
+
+    actual_rec = float(_field_value(context, "recommended_product_price") or 0)
+    expected_rec = float(rec_price)
+    assert (
+        abs(actual_rec - expected_rec) < 0.01
+    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+
+    return actual_base, actual_rec
+
+
 @given("the recommendation service is running")
 def step_service_running(context):
-    resp = requests.get(f"{context.base_url}/health", timeout=WAIT_TIMEOUT)
-    assert resp.status_code == HTTP_200_OK
+    _list_recommendations(context)
+    message = context.driver.find_element(By.ID, "flash_message").text.strip()
+    assert "success" in message.lower(), "Listing recommendations failed via the UI"
 
 
 @given('I am on the "Home Page"')
@@ -46,73 +230,24 @@ def step_open_home_page(context):
 
 @given("the following recommendations exist")
 def step_seed_recommendations(context):
-    """Delete all recommendations and load the ones from the Background table."""
-    rest_endpoint = f"{context.base_url}/recommendations"
+    """Delete all recommendations and load the ones from the Background table via the UI."""
+    _ensure_on_home_page(context)
+    _delete_all_recommendations(context)
 
-    # 1) Delete all existing recommendations
-    resp = requests.get(rest_endpoint, timeout=WAIT_TIMEOUT)
-    resp.raise_for_status()
-    for rec in resp.json():
-        rec_id = rec["recommendation_id"]
-        del_resp = requests.delete(f"{rest_endpoint}/{rec_id}", timeout=WAIT_TIMEOUT)
-        # Most APIs return 204 for successful delete
-        assert del_resp.status_code in (
-            HTTP_200_OK,
-            204,
-            HTTP_404_NOT_FOUND,
-        ), f"Failed to delete recommendation {rec_id}: {del_resp.status_code}"
-
-    # 2) Seed fresh recommendations from the table
     for row in context.table:
-        payload = {
-            "base_product_id": int(row["base_product_id"]),
-            "recommended_product_id": int(row["recommended_product_id"]),
-            "recommendation_type": row["recommendation_type"],
-            "status": row["status"],
-            "confidence_score": float(row["confidence_score"]),
-        }
-        if row.get("base_product_price"):
-            payload["base_product_price"] = float(row["base_product_price"])
-        if row.get("recommended_product_price"):
-            payload["recommended_product_price"] = float(
-                row["recommended_product_price"]
-            )
-        if row.get("base_product_description"):
-            payload["base_product_description"] = row["base_product_description"]
-        if row.get("recommended_product_description"):
-            payload["recommended_product_description"] = row[
-                "recommended_product_description"
-            ]
+        row_data = row.as_dict()
+        _create_recommendation_from_row(context, row_data)
 
-        resp = requests.post(rest_endpoint, json=payload, timeout=WAIT_TIMEOUT)
-        resp.raise_for_status()
+    _list_recommendations(context)
 
 
 @given(
     'I remember the recommendation with base product "{base_id}" and recommended product "{rec_id}"'
 )
 def step_remember_recommendation(context, base_id, rec_id):
-    """Fetch and store a recommendation id matching the given base/recommended ids."""
-    resp = requests.get(
-        f"{context.base_url}/recommendations",
-        params={"base_product_id": int(base_id)},
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    matches = [
-        rec
-        for rec in resp.json()
-        if str(rec.get("recommended_product_id")) == str(rec_id)
-    ]
-    assert (
-        matches
-    ), f"No recommendation found for base {base_id} and recommended {rec_id}"
-    rec = matches[0]
-    context.remembered_rec = rec
-    # Also store in remembered_recs dict for scenarios that need multiple
-    if not hasattr(context, "remembered_recs"):
-        context.remembered_recs = {}
-    context.remembered_recs[base_id] = {"recommendation": rec}
+    """Fetch and store a recommendation id matching the given base/recommended ids via the UI."""
+    record = _find_recommendation(context, base_id, rec_id)
+    _remember_record(context, base_id, record)
 
 
 @when('I set the "Recommendation ID" to that recommendation id')
@@ -212,28 +347,28 @@ def step_press_update(context):
     'status "{status}", and confidence score "{confidence}"'
 )
 def step_verify_updated_recommendation(context, rec_type, status, confidence):
-    """Verify the remembered recommendation reflects updated values via the API."""
+    """Verify the remembered recommendation reflects updated values via the UI."""
     rec_id = getattr(context, "current_rec_id", None)
     if rec_id is None and hasattr(context, "remembered_rec"):
         rec_id = context.remembered_rec["recommendation_id"]
 
     assert rec_id is not None, "No recommendation id available for verification"
 
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    rec = resp.json()
+    message = _retrieve_recommendation_by_id(context, rec_id)
+    assert "success" in message.lower(), "Retrieve via UI did not succeed"
 
-    assert str(rec.get("recommendation_type")) == str(rec_type)
-    assert str(rec.get("status")) == str(status)
+    actual_type = _field_value(context, "recommendation_type")
+    actual_status = _field_value(context, "status")
+    actual_conf = _field_value(context, "confidence_score")
+
+    assert str(actual_type) == str(rec_type)
+    assert str(actual_status) == str(status)
 
     expected_conf = float(confidence)
-    actual_conf = float(rec.get("confidence_score"))
+    actual_conf_float = float(actual_conf)
     assert (
-        abs(actual_conf - expected_conf) < 1e-6
-    ), f"Expected confidence {expected_conf}, got {actual_conf}"
+        abs(actual_conf_float - expected_conf) < 1e-6
+    ), f"Expected confidence {expected_conf}, got {actual_conf_float}"
 
 
 ######################################################################
@@ -245,22 +380,9 @@ def step_verify_updated_recommendation(context, rec_type, status, confidence):
     'I have the recommendation with base product "{base_id}" and recommended product "{rec_id}"'
 )
 def step_have_recommendation(context, base_id, rec_id):
-    """Fetch and store a recommendation id matching the given base/recommended ids."""
-    resp = requests.get(
-        f"{context.base_url}/recommendations",
-        params={"base_product_id": int(base_id)},
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    matches = [
-        rec
-        for rec in resp.json()
-        if str(rec.get("recommended_product_id")) == str(rec_id)
-    ]
-    assert (
-        matches
-    ), f"No recommendation found for base {base_id} and recommended {rec_id}"
-    context.remembered_rec = matches[0]
+    """Fetch and store a recommendation id matching the given base/recommended ids via the UI."""
+    record = _find_recommendation(context, base_id, rec_id)
+    context.remembered_rec = record.copy()
 
 
 @when('I press the "Delete" button')
@@ -291,20 +413,15 @@ def step_rec_id(context):
 
 @then("the remembered recommendation should not exist")
 def step_remembered_recommendation_should_not_exist(context):
-    """Verify that the remembered recommendation no longer exists via the API."""
+    """Verify that the remembered recommendation no longer exists via the UI."""
     rec_id = getattr(context, "current_rec_id", None)
     if rec_id is None and hasattr(context, "remembered_rec"):
         rec_id = context.remembered_rec["recommendation_id"]
 
     assert rec_id is not None, "No recommendation id remembered in context"
 
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
-    )
-    assert (
-        resp.status_code == HTTP_404_NOT_FOUND
-    ), f"Expected 404 after delete, got {resp.status_code}"
+    message = _retrieve_recommendation_by_id(context, rec_id)
+    assert "not found" in message.lower(), f"Expected not-found message, got: {message}"
 
 
 ######################################################################
@@ -314,39 +431,51 @@ def step_remembered_recommendation_should_not_exist(context):
 
 def _parse_search_results(context):
     """Parse the search results table into a list of dicts."""
-    table = context.driver.find_element(By.ID, "search_results")
+    container = context.driver.find_element(By.ID, "search_results")
+    tables = container.find_elements(By.TAG_NAME, "table")
+    if not tables:
+        return []
+
+    table = tables[0]
     rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
+    field_names = [
+        "recommendation_id",
+        "base_product_id",
+        "recommended_product_id",
+        "recommendation_type",
+        "status",
+        "confidence_score",
+        "base_product_price",
+        "recommended_product_price",
+        "base_product_description",
+        "recommended_product_description",
+        "created_date",
+        "updated_date",
+    ]
     results = []
     for row in rows:
         cells = row.find_elements(By.TAG_NAME, "td")
-        if not cells:
+        if len(cells) < len(field_names):
             continue
-        rec = {
-            "recommendation_id": cells[0].text.strip(),
-            "base_product_id": cells[1].text.strip(),
-            "recommended_product_id": cells[2].text.strip(),
-        }
+        rec = {field_names[i]: cells[i].text.strip() for i in range(len(field_names))}
         results.append(rec)
     return results
+
+
+def _current_list_results(context):
+    """Return the most recently rendered search results from the UI."""
+    return _wait_and_parse_results(context)
 
 
 @when('I press the "List" button')
 def step_press_list_button(context):
     """Click the List button on the UI and wait for results."""
-    context.driver.find_element(By.ID, "list-btn").click()
-
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.presence_of_element_located((By.ID, "search_results"))
-    )
-    context.list_results = _parse_search_results(context)
+    context.list_results = _list_recommendations(context)
 
 
 @then("I should see at least {min_count:d} recommendations in the list")
 def step_see_at_least_recommendations(context, min_count):
-    results = getattr(context, "list_results", None)
-    if results is None:
-        results = _parse_search_results(context)
-        context.list_results = results
+    results = _current_list_results(context)
 
     actual = len(results)
     assert (
@@ -359,10 +488,7 @@ def step_see_at_least_recommendations(context, min_count):
     'and recommended product "{rec_id}" in the list'
 )
 def step_see_recommendation_in_list(context, base_id, rec_id):
-    results = getattr(context, "list_results", None)
-    if results is None:
-        results = _parse_search_results(context)
-        context.list_results = results
+    results = _current_list_results(context)
 
     matches = [
         rec
@@ -453,23 +579,14 @@ def step_impl_press_button_then(context, button_name):
     'the remembered recommendation has base product price "{base_price}" and recommended product price "{rec_price}"'
 )
 def step_remembered_rec_has_prices(context, base_price, rec_price):
-    """Verify and store the prices of the remembered recommendation."""
+    """Verify and store the prices of the remembered recommendation via the UI."""
     rec_id = context.remembered_rec["recommendation_id"]
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
+    actual_base, actual_rec = _verify_prices_via_ui(
+        context, rec_id, base_price, rec_price
     )
-    resp.raise_for_status()
-    rec = resp.json()
-    assert float(rec.get("base_product_price", 0)) == float(
-        base_price
-    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
-    assert float(rec.get("recommended_product_price", 0)) == float(
-        rec_price
-    ), f"Expected recommended_product_price {rec_price}, got {rec.get('recommended_product_price')}"
-    # Store prices for later verification
-    context.remembered_rec["original_base_price"] = float(base_price)
-    context.remembered_rec["original_rec_price"] = float(rec_price)
+
+    context.remembered_rec["original_base_price"] = actual_base
+    context.remembered_rec["original_rec_price"] = actual_rec
 
 
 @given(
@@ -477,37 +594,24 @@ def step_remembered_rec_has_prices(context, base_price, rec_price):
     '"{base_price}" and recommended product price "{rec_price}"'
 )
 def step_remembered_rec_by_base_has_prices(context, base_id, base_price, rec_price):
-    """Find recommendation by base product ID and verify/store prices."""
-    # Find recommendation by base product ID
-    resp = requests.get(
-        f"{context.base_url}/recommendations",
-        params={"base_product_id": int(base_id)},
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    matches = resp.json()
-    assert matches, f"No recommendation found for base product {base_id}"
+    """Verify/store prices for a previously remembered recommendation via the UI."""
+    assert hasattr(
+        context, "remembered_recs"
+    ), "No remembered recommendations available"
+    key = str(base_id)
+    assert (
+        key in context.remembered_recs
+    ), f"Recommendation for base product {base_id} was not remembered"
 
-    # Store as first or second remembered recommendation
-    if not hasattr(context, "remembered_recs"):
-        context.remembered_recs = {}
+    rec_entry = context.remembered_recs[key]
+    rec_id = rec_entry["recommendation_id"]
 
-    rec = matches[0]  # Take first match
-
-    # Verify prices
-    assert float(rec.get("base_product_price", 0)) == float(
-        base_price
-    ), f"Expected base_product_price {base_price}, got {rec.get('base_product_price')}"
-    assert float(rec.get("recommended_product_price", 0)) == float(rec_price), (
-        f"Expected recommended_product_price {rec_price}, "
-        f"got {rec.get('recommended_product_price')}"
+    actual_base, actual_rec = _verify_prices_via_ui(
+        context, rec_id, base_price, rec_price
     )
 
-    context.remembered_recs[base_id] = {
-        "recommendation": rec,
-        "original_base_price": float(base_price),
-        "original_rec_price": float(rec_price),
-    }
+    rec_entry["original_base_price"] = actual_base
+    rec_entry["original_rec_price"] = actual_rec
 
 
 @when(
@@ -524,13 +628,7 @@ def step_apply_flat_discount(context, discount):
     apply_button = context.driver.find_element(By.ID, "apply-flat-discount-btn")
     apply_button.click()
 
-    # Wait for the response to appear
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.any_of(
-            EC.presence_of_element_located((By.ID, "discount_success_message")),
-            EC.presence_of_element_located((By.ID, "discount_error_message")),
-        )
-    )
+    _wait_for_discount_response(context)
 
 
 @when("I call apply discount endpoint without parameters")
@@ -540,13 +638,7 @@ def step_apply_discount_no_params(context):
     apply_button = context.driver.find_element(By.ID, "apply-flat-discount-btn")
     apply_button.click()
 
-    # Wait for the error message to appear
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.any_of(
-            EC.presence_of_element_located((By.ID, "discount_success_message")),
-            EC.presence_of_element_located((By.ID, "discount_error_message")),
-        )
-    )
+    _wait_for_discount_response(context)
 
 
 @when(
@@ -556,12 +648,10 @@ def step_apply_discount_no_params(context):
 def step_apply_custom_discount_first(context, base_discount, rec_discount):
     """Add custom discount entry for the first remembered recommendation via UI."""
     # Get the first remembered recommendation ID
-    if hasattr(context, "remembered_recs"):
+    if hasattr(context, "remembered_recs") and context.remembered_recs:
         # Use the first one in remembered_recs
         first_key = list(context.remembered_recs.keys())[0]
-        rec_id = context.remembered_recs[first_key]["recommendation"][
-            "recommendation_id"
-        ]
+        rec_id = context.remembered_recs[first_key]["recommendation_id"]
     else:
         rec_id = context.remembered_rec["recommendation_id"]
 
@@ -604,9 +694,7 @@ def step_apply_custom_discount_second(context, base_discount, rec_discount):
         keys = list(context.remembered_recs.keys())
         if len(keys) >= 2:
             second_key = keys[1]
-            second_rec_id = context.remembered_recs[second_key]["recommendation"][
-                "recommendation_id"
-            ]
+            second_rec_id = context.remembered_recs[second_key]["recommendation_id"]
         else:
             raise AssertionError("Second remembered recommendation not found")
     else:
@@ -642,13 +730,7 @@ def step_apply_custom_discount_second(context, base_discount, rec_discount):
     apply_button = context.driver.find_element(By.ID, "apply-custom-discount-btn")
     apply_button.click()
 
-    # Wait for the response to appear
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.any_of(
-            EC.presence_of_element_located((By.ID, "discount_success_message")),
-            EC.presence_of_element_located((By.ID, "discount_error_message")),
-        )
-    )
+    _wait_for_discount_response(context)
 
 
 @when("I apply custom discounts with an empty JSON body")
@@ -658,13 +740,7 @@ def step_apply_custom_discount_empty(context):
     apply_button = context.driver.find_element(By.ID, "apply-custom-discount-btn")
     apply_button.click()
 
-    # Wait for the error message to appear
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.any_of(
-            EC.presence_of_element_located((By.ID, "discount_success_message")),
-            EC.presence_of_element_located((By.ID, "discount_error_message")),
-        )
-    )
+    _wait_for_discount_response(context)
 
 
 @then('the API should return status "{status_code}"')
@@ -768,24 +844,7 @@ def step_response_contains(context, text):
 def step_verify_updated_prices(context, base_price, rec_price):
     """Verify the remembered recommendation has updated prices."""
     rec_id = context.remembered_rec["recommendation_id"]
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    rec = resp.json()
-
-    actual_base = float(rec.get("base_product_price", 0))
-    expected_base = float(base_price)
-    assert (
-        abs(actual_base - expected_base) < 0.01
-    ), f"Expected base_product_price {expected_base}, got {actual_base}"
-
-    actual_rec = float(rec.get("recommended_product_price", 0))
-    expected_rec = float(rec_price)
-    assert (
-        abs(actual_rec - expected_rec) < 0.01
-    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+    _verify_prices_via_ui(context, rec_id, base_price, rec_price)
 
 
 @then(
@@ -794,32 +853,12 @@ def step_verify_updated_prices(context, base_price, rec_price):
 )
 def step_verify_first_updated_prices(context, base_price, rec_price):
     """Verify the first remembered recommendation has updated prices."""
-    if hasattr(context, "remembered_recs"):
+    if hasattr(context, "remembered_recs") and context.remembered_recs:
         first_key = list(context.remembered_recs.keys())[0]
-        rec_id = context.remembered_recs[first_key]["recommendation"][
-            "recommendation_id"
-        ]
+        rec_id = context.remembered_recs[first_key]["recommendation_id"]
     else:
         rec_id = context.remembered_rec["recommendation_id"]
-
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    rec = resp.json()
-
-    actual_base = float(rec.get("base_product_price", 0))
-    expected_base = float(base_price)
-    assert (
-        abs(actual_base - expected_base) < 0.01
-    ), f"Expected base_product_price {expected_base}, got {actual_base}"
-
-    actual_rec = float(rec.get("recommended_product_price", 0))
-    expected_rec = float(rec_price)
-    assert (
-        abs(actual_rec - expected_rec) < 0.01
-    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+    _verify_prices_via_ui(context, rec_id, base_price, rec_price)
 
 
 @then(
@@ -832,29 +871,10 @@ def step_verify_second_updated_prices(context, base_price, rec_price):
         keys = list(context.remembered_recs.keys())
         if len(keys) >= 2:
             second_key = keys[1]
-            rec_id = context.remembered_recs[second_key]["recommendation"][
-                "recommendation_id"
-            ]
+            rec_id = context.remembered_recs[second_key]["recommendation_id"]
         else:
             raise AssertionError("Second remembered recommendation not found")
     else:
         raise AssertionError("No remembered recommendations found")
 
-    resp = requests.get(
-        f"{context.base_url}/recommendations/{rec_id}",
-        timeout=WAIT_TIMEOUT,
-    )
-    resp.raise_for_status()
-    rec = resp.json()
-
-    actual_base = float(rec.get("base_product_price", 0))
-    expected_base = float(base_price)
-    assert (
-        abs(actual_base - expected_base) < 0.01
-    ), f"Expected base_product_price {expected_base}, got {actual_base}"
-
-    actual_rec = float(rec.get("recommended_product_price", 0))
-    expected_rec = float(rec_price)
-    assert (
-        abs(actual_rec - expected_rec) < 0.01
-    ), f"Expected recommended_product_price {expected_rec}, got {actual_rec}"
+    _verify_prices_via_ui(context, rec_id, base_price, rec_price)

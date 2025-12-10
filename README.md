@@ -37,7 +37,11 @@ flask run -h 0.0.0.0 -p 8080
 ```
 
 The service will be available at:  
-👉 **http://localhost:8080**
+**http://localhost:8080**
+
+Interactive API documentation (Swagger UI) is served at:  
+**http://localhost:8080/apidocs**
+![alt text](image.png)
 
 ---
 
@@ -135,7 +139,7 @@ Returns a simple landing page text.
 
 #### Example Request
 ```http
-POST /recommendations
+POST /api/recommendations
 Content-Type: application/json
 
 {
@@ -154,7 +158,7 @@ Content-Type: application/json
 #### Example Response
 ```http
 201 Created
-Location: /recommendations/1
+Location: /api/recommendations/1
 
 {
   "id": 1,
@@ -172,7 +176,7 @@ Location: /recommendations/1
 
 #### Example Request
 ```http
-GET /recommendations/1
+GET /api/recommendations/1
 ```
 
 #### Example Response
@@ -195,7 +199,7 @@ GET /recommendations/1
 
 #### Example Request
 ```http
-PUT /recommendations/1
+PUT /api/recommendations/1
 Content-Type: application/json
 
 {
@@ -224,7 +228,7 @@ Content-Type: application/json
 
 #### Example Request
 ```http
-DELETE /recommendations/1
+DELETE /api/recommendations/1
 ```
 
 #### Example Response
@@ -238,7 +242,7 @@ DELETE /recommendations/1
 
 #### Example Request
 ```http
-GET /recommendations
+GET /api/recommendations
 ```
 
 #### Example Response
