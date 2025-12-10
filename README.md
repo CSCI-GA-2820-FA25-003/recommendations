@@ -3,135 +3,171 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Language-Python-blue.svg)](https://python.org/)
 
-This repository implements a **Recommendations Microservice** built with Flask and SQLAlchemy.  
-It follows the NYU DevOps microservice architecture template and supports RESTful endpoints for managing product recommendations.
+Flask + SQLAlchemy service for storing simple product-to-product recommendations. The project follows the NYU DevOps microservice pattern and currently exposes endpoints to create, fetch, and delete recommendations while we continue to layer on more features.
 
 ---
 
-## Overview
+## Project Overview
 
-This project provides a backend service for managing product-to-product recommendations, such as **cross-sell**, **up-sell**, or **accessory** suggestions.  
-It includes a data model, Flask API routes, test cases, and Docker/Makefile workflows for development and deployment.
+- Handles **cross-sell**, **up-sell**, and **accessory** recommendations.
+- Implements validation (enumerated types, numeric ranges, etc.) and returns JSON error payloads via shared error handlers.
+- Ships with a Makefile workflow plus pytest and lint tooling to keep development friction low.
+- The root `service/` package is the live code path for `wsgi.py`. The nested `recommendations/` folder contains the original course template (UI, Swagger, BDD assets) and is kept only for reference.
 
-### Quickstart (Local Setup)
+### Architecture
+
+```
+Client (HTTP/JSON)
+        ↓
+service/routes.py (Flask views + validation)
+        ↓
+service/models.py (SQLAlchemy Recommendation model)
+        ↓
+PostgreSQL database (configured through DATABASE_URI)
+```
+
+Supporting pieces:
+- `service/__init__.py` contains the Flask app factory, logging setup, and auto `db.create_all()`.
+- `service/common/` holds cross-cutting helpers (error handlers, CLI commands, log handlers, HTTP status codes).
+- `tests/` host unit tests powered by pytest/factory-boy; each test run wipes the database tables to keep cases isolated.
+
+### Repository Layout
+
+```text
+dot-env-example     # sample environment file
+Makefile            # install, lint, run, test, and ops helpers
+Procfile            # `honcho`/Heroku process definition (gunicorn)
+Pipfile(.lock)      # pipenv environment (Python 3.11)
+service/            # application package (app factory, models, routes, common helpers)
+tests/              # pytest suite and factories
+instance/           # Flask instance dir (placeholder for future configs)
+recommendations/    # archived template with UI + swagger (not executed by wsgi.py)
+wsgi.py             # runtime entry point used by `flask run` / gunicorn
+```
+
+---
+
+## Prerequisites
+
+- Python **3.11**
+- [pipenv](https://pipenv.pypa.io/) for dependency management
+- Access to a PostgreSQL instance (local container or remote); update `DATABASE_URI` if you use something other than the default `postgresql+psycopg://postgres:postgres@localhost:5432/postgres`
+- GNU Make (optional but recommended for the provided commands)
+
+> Tip: you can point `DATABASE_URI` at SQLite (`sqlite:///recommendations.db`) for quick local smoke tests, but CI and course rubrics expect PostgreSQL.
+
+---
+
+## Local Setup & Run
+
+### 1. Clone and install
 
 ```bash
-# Clone repository
 git clone https://github.com/CSCI-GA-2820-FA25-003/recommendations
 cd recommendations
-
-# Use Python 3.11 with Pipenv
 pip install pipenv
 pipenv install --dev
-pipenv shell
-
-# Copy environment variables
-cp dot-env-example .env
-
-# Run service
-make run
-# or
-flask run -h 0.0.0.0 -p 8080
 ```
 
-The service will be available at:  
-👉 **http://localhost:8080**
-
----
-
-## Automatic Setup
-
-The repository can be initialized as a GitHub template by pressing the green **“Use this template”** button.  
-This allows your team to create a new repository based on this scaffold.
-
----
-
-## Manual Setup
-
-You can also manually copy starter code into an existing project.  
-If you do this, ensure you also copy hidden files that some GUI file managers may skip:
+### 2. Configure environment variables
 
 ```bash
-cp .gitignore      ../<your_repo_folder>/
-cp .gitattributes  ../<your_repo_folder>/
+cp dot-env-example .env
 ```
 
-For configuration, copy the provided `dot-env-example` and update as needed:
+Update `.env` with your values:
 
 ```
 FLASK_APP=wsgi:app
 PORT=8080
 DATABASE_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
-SECRET_KEY=
+SECRET_KEY=<replace_with_make_secret_output>
 LOG_LEVEL=INFO
 ```
 
----
-
-## Contents
-
-```text
-.gitignore          - ignores unnecessary files
-.gitattributes      - handles CRLF line endings
-dot-env-example     - environment variables sample
-Pipfile             - Pipenv dependency manager (Python 3.11)
-Procfile            - Gunicorn entry for deployment
-Makefile            - developer tasks (install/lint/test/run/deploy)
-setup.cfg           - lint/test configuration
-wsgi.py             - WSGI entry point (create_app())
-
-service/                   - main application package
-├── __init__.py            - Flask app factory
-├── config.py              - configuration settings
-├── models.py              - SQLAlchemy model (Recommendation)
-├── routes.py              - REST API routes
-└── common/                - helper modules (CLI, logging, errors, status codes)
-
-tests/                     - pytest suite
-├── factories.py           - data factories
-├── test_cli_commands.py   - CLI tests
-├── test_models.py         - model tests
-└── test_routes.py         - route tests
-```
-
----
-
-## Makefile Commands
-
-Common developer commands:
+Generate a random secret any time with:
 
 ```bash
-make install     # install dependencies
-make lint        # check code style
-make format      # auto-format with black/isort
-make test        # run all tests
-make coverage    # run tests with coverage
-make run         # run Flask locally (wsgi:app)
-make build/push  # container image build & push
-make deploy      # deploy to local Kubernetes cluster
+pipenv run make secret
 ```
 
-> Run `make help` to view all available targets.
+### 3. Start PostgreSQL (example)
+
+```bash
+docker run --name recommendations-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=postgres \
+  -p 5432:5432 \
+  -d postgres:16
+```
+
+Create a matching `testdb` database (used by pytest) or adjust the `DATABASE_URI` in `tests/test_routes.py` to point at an existing database.
+
+### 4. Run the service
+
+```bash
+pipenv shell
+make run          # uses honcho + Procfile (gunicorn) on http://localhost:8080
+# or run the built-in server explicitly:
+FLASK_APP=wsgi:app FLASK_ENV=development flask run -h 0.0.0.0 -p 8080
+```
+
+On startup the app factory performs `db.create_all()`, so tables are provisioned automatically.
 
 ---
 
-## API Overview
+## Useful Make Targets
 
-The following section provides **example API calls**, including request and response structures to guide developers during testing and integration.
+| Target | Description |
+|--------|-------------|
+| `make install` | Install dependencies into the host environment (used inside containers/GitHub Codespaces). |
+| `make lint` | Run flake8 + pylint with the repo defaults. |
+| `make test` | Execute the pytest suite with coverage (95% threshold). |
+| `make run` | Launch the service via honcho + Procfile (`web: gunicorn ...`). |
+| `make clean` | Remove cached Docker layers (helpful before container builds). |
+| `make secret` | Emit a random hex string you can drop into `.env`. |
 
-### Root Endpoint
-
-```
-GET /
-→ 200 OK
-```
-Returns a simple landing page text.
+Run `make help` for the full catalog, including local k3d helpers.
 
 ---
 
-### Create a Recommendation
+## Database Utilities
 
-#### Example Request
+We expose a simple Flask CLI command to reset schemas:
+
+```bash
+FLASK_APP=wsgi:app pipenv run flask db-create
+```
+
+This drops and recreates every table defined by SQLAlchemy, which is useful when you change the model during development.
+
+---
+
+## Testing & Quality
+
+```bash
+pipenv run make lint   # style + static analysis
+pipenv run make test   # pytest --pspec --cov=service --cov-fail-under=95
+```
+
+Tests expect a PostgreSQL database reachable via `postgresql+psycopg://postgres:postgres@localhost:5432/testdb`. Create that database once (e.g., `createdb testdb`) or override `DATABASE_URI` before running `pytest`. Each test cleans up rows to keep the database state deterministic.
+
+Coverage reports live in `htmlcov/` after running `pytest --cov` if you want a detailed breakdown.
+
+---
+
+## API Reference
+
+> Swagger UI has not been wired up yet (the root response references `/apidocs` for future work). Use the examples below or HTTPie/cURL for manual testing.
+
+### `GET /`
+
+Returns a JSON landing payload with service metadata and helper links.
+
+### `POST /recommendations`
+
+Create a recommendation. `Content-Type: application/json` is required.
+
 ```http
 POST /recommendations
 Content-Type: application/json
@@ -144,193 +180,110 @@ Content-Type: application/json
   "confidence_score": 0.85,
   "base_product_price": 19.99,
   "recommended_product_price": 9.99,
-  "base_product_description": "Base product",
-  "recommended_product_description": "Accessory"
+  "base_product_description": "Bundle anchor",
+  "recommended_product_description": "Add-on"
 }
 ```
 
-#### Example Response
+Response:
+
 ```http
 201 Created
-Location: /recommendations/1
+Location: unknown
 
 {
-  "id": 1,
+  "recommendation_id": 1,
   "base_product_id": 1001,
   "recommended_product_id": 2001,
   "recommendation_type": "cross-sell",
   "status": "active",
-  "confidence_score": 0.85
+  "confidence_score": 0.85,
+  "base_product_price": 19.99,
+  "recommended_product_price": 9.99,
+  "base_product_description": "Bundle anchor",
+  "recommended_product_description": "Add-on",
+  "created_date": "...",
+  "updated_date": "..."
 }
 ```
 
----
+Example with HTTPie:
 
-### Read a Recommendation
+```bash
+http POST :8080/recommendations \
+  base_product_id:=1001 recommended_product_id:=2001 \
+  recommendation_type=cross-sell status=active confidence_score:=0.85
+```
 
-#### Example Request
+### `GET /recommendations/<recommendation_id>`
+
+Fetch a single recommendation.
+
 ```http
 GET /recommendations/1
-```
-
-#### Example Response
-```http
-200 OK
-
+→ 200 OK
 {
-  "id": 1,
+  "recommendation_id": 1,
   "base_product_id": 1001,
   "recommended_product_id": 2001,
   "recommendation_type": "cross-sell",
   "status": "active",
-  "confidence_score": 0.85
+  "confidence_score": 0.85,
+  ...
 }
 ```
 
----
+`404 Not Found` is returned if the ID does not exist.
 
-### Update a Recommendation
+### `DELETE /recommendations/<recommendation_id>`
 
-#### Example Request
-```http
-PUT /recommendations/1
-Content-Type: application/json
+Remove a recommendation permanently.
 
-{
-  "status": "inactive",
-  "confidence_score": 0.6
-}
-```
-
-#### Example Response
-```http
-200 OK
-
-{
-  "id": 1,
-  "base_product_id": 1001,
-  "recommended_product_id": 2001,
-  "recommendation_type": "cross-sell",
-  "status": "inactive",
-  "confidence_score": 0.6
-}
-```
-
----
-
-### Delete a Recommendation
-
-#### Example Request
 ```http
 DELETE /recommendations/1
-```
-
-#### Example Response
-```http
-204 No Content
+→ 204 No Content
 ```
 
 ---
 
-### List All Recommendations
+### Validation Rules
 
-#### Example Request
-```http
-GET /recommendations
-```
-
-#### Example Response
-```http
-200 OK
-
-[
-  {
-    "id": 1,
-    "base_product_id": 1001,
-    "recommended_product_id": 2001,
-    "recommendation_type": "cross-sell",
-    "status": "active"
-  },
-  {
-    "id": 2,
-    "base_product_id": 3001,
-    "recommended_product_id": 4001,
-    "recommendation_type": "up-sell",
-    "status": "inactive"
-  }
-]
-```
+- `recommendation_type` must be one of `cross-sell`, `up-sell`, or `accessory`.
+- `status` must be `active` or `inactive`.
+- `confidence_score` is stored as Decimal(3,2) and must be between `0` and `1`.
+- Price fields are optional but, when present, must be decimals parsable by SQLAlchemy.
+- Missing or invalid attributes raise a `DataValidationError` and result in a `400 Bad Request` JSON response from the error handlers defined in `service/common/error_handlers.py`.
 
 ---
 
 ## Data Model
 
-The `Recommendation` model is defined in `service/models.py` using SQLAlchemy.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| id | Integer | Primary key |
-| base_product_id | Integer | ID of the base product |
-| recommended_product_id | Integer | ID of the recommended product |
-| recommendation_type | Enum | `"cross-sell"`, `"up-sell"`, `"accessory"` |
-| status | Enum | `"active"` or `"inactive"` |
-| confidence_score | Numeric(3,2) | Confidence value (e.g., 0.85) |
-| base_product_price | Numeric(14,2) | Optional |
-| recommended_product_price | Numeric(14,2) | Optional |
-| base_product_description | String(1023) | Optional |
-| recommended_product_description | String(1023) | Optional |
-| created_date | DateTime | Auto timestamp |
-| updated_date | DateTime | Auto timestamp |
-
----
-
-## Database
-
-Configured for **PostgreSQL** by default:
-
-```
-postgresql+psycopg://postgres:postgres@localhost:5432/postgres
-```
-
-Tables are created automatically on app startup with `db.create_all()`.
-
----
-
-## Testing
-
-Run unit tests with:
-
-```bash
-make test
-# or
-pytest -q
-```
-
-Generate a coverage report:
-
-```bash
-make coverage
-```
-
-Tests are located in the `/tests` directory.
+| JSON Field | DB Column | Type | Notes |
+|------------|-----------|------|-------|
+| `recommendation_id` | `recommendation_id` | Integer | Primary key, auto-incremented. |
+| `base_product_id` | `base_product_id` | Integer (required) | Product that is the anchor for the recommendation. |
+| `recommended_product_id` | `recommended_product_id` | Integer (required) | Product being suggested. |
+| `recommendation_type` | `recommendation_type` | Enum | `cross-sell`, `up-sell`, or `accessory`. |
+| `status` | `status` | Enum | `active` (default) or `inactive`. |
+| `confidence_score` | `confidence_score` | Numeric(3,2) | Required probability-like score in `[0, 1]`. |
+| `base_product_price` | `base_product_price` | Numeric(14,2) | Optional MSRP for the base product. |
+| `recommended_product_price` | `recommended_product_price` | Numeric(14,2) | Optional MSRP for the recommended product. |
+| `base_product_description` | `base_product_description` | String(1023) | Optional marketing copy. |
+| `recommended_product_description` | `recommended_product_description` | String(1023) | Optional description for the recommendation. |
+| `created_date` | `created_date` | DateTime (UTC) | Auto-populated when `create()` is called. |
+| `updated_date` | `updated_date` | DateTime (UTC) | Auto-maintained on update mutations. |
 
 ---
 
 ## Deployment
 
-Production uses **Gunicorn** via the `Procfile`:
-
-```
-web: gunicorn --bind 0.0.0.0:$PORT wsgi:app
-```
-
-Docker and Kubernetes helpers are available through the Makefile (`make build`, `make cluster`, `make deploy`).
+- The `Procfile` runs `gunicorn --bind 0.0.0.0:$PORT wsgi:app`, which is what `make run` orchestrates through honcho. Use it locally to mimic production or on platforms like Heroku/Render.
+- `make cluster`, `make deploy`, etc., are scaffolding for running inside a local k3d cluster; supply manifests under `k8s/` (or point `kubectl` at `recommendations/k8s`) if you intend to use those targets.
 
 ---
 
 ## License
 
-Licensed under the **Apache License 2.0**.  
-See [LICENSE](LICENSE) for details.
+Licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) for the full text.
 
-This repository is part of the **NYU CSCI-GA.2820 DevOps and Agile Methodologies** course.
+This microservice was produced for the NYU CSCI-GA.2820 DevOps and Agile Methodologies course.
