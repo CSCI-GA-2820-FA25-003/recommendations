@@ -6,6 +6,8 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.common.exceptions import TimeoutException
+import time
 
 
 def _wait_for_text(context, locator, text):
@@ -20,19 +22,26 @@ def _field_value(context, element_id):
     return context.driver.find_element(By.ID, element_id).get_attribute("value")
 
 
-def _ensure_on_home_page(context):
-    """Navigate to the UI home page if we are not already there and wait until it is ready."""
+def _ensure_on_home_page(context, retries: int = 3):
+    """Navigate to the UI home page and wait until it is ready."""
     home_url = f"{context.base_url}/ui"
+    last_error = None
 
-    if not context.driver.current_url.startswith(home_url):
-        context.driver.get(home_url)
+    for attempt in range(retries):
+        if not context.driver.current_url.startswith(home_url):
+            context.driver.get(home_url)
 
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.presence_of_element_located((By.ID, "list-btn"))
-    )
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.presence_of_element_located((By.ID, "search_results"))
-    )
+        try:
+            WebDriverWait(context.driver, context.wait_seconds).until(
+                EC.presence_of_element_located((By.ID, "list-btn"))
+            )
+            WebDriverWait(context.driver, context.wait_seconds).until(
+                EC.presence_of_element_located((By.ID, "search_results"))
+            )
+            return
+        except TimeoutException as exc:
+            last_error = exc
+            time.sleep(1)
 
 
 def _wait_for_flash_message(context, expected_substring=None):
