@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Recommendation RESTful Service</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="static/images/newapp-icon.png">
+  <link rel="stylesheet" href="static/css/cerulean_bootstrap.min.css">
+</head>
+
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1>Recommendation REST API Service</h1>
+    </div>
+
+    <!-- Flash Message -->
+    <div class="table-responsive">
+      <table class="table">
+        <tr>
+          <td>Status:</td>
+          <td><span id="flash_message"></span></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FORM -->
+    <div class="col-md-12" id="form_data">
+      <h3>Create, Retrieve, Update, and Delete a Recommendation:</h3>
+      <div class="well">
+        <div class="form-horizontal">
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="recommendation_id">Recommendation ID:</label>
+            <div class="col-sm-6">
+              <input type="number" class="form-control" id="recommendation_id" placeholder="Enter Recommendation ID">
+            </div>
+            <div class="col-sm-4">
+              <button type="submit" class="btn btn-primary" id="retrieve-btn">Retrieve</button>
+              <button type="submit" class="btn btn-danger" id="delete-btn">Delete</button>
+            </div>
+          </div>
+        </div> <!-- form horizontal -->
+
+        <div class="form-horizontal">
+
+          <!-- BASE PRODUCT -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="base_product_id">Base Product ID:</label>
+            <div class="col-sm-4">
+              <input type="number" class="form-control" id="base_product_id" placeholder="Base product id">
+            </div>
+            <label class="control-label col-sm-2" for="recommended_product_id">Recommended Product ID:</label>
+            <div class="col-sm-4">
+              <input type="number" class="form-control" id="recommended_product_id"
+                placeholder="Recommended product id">
+            </div>
+          </div>
+
+          <!-- TYPE / STATUS -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="recommendation_type">Recommendation Type:</label>
+            <div class="col-sm-4">
+              <select class="form-control" id="recommendation_type">
+                <option value="">Select type</option>
+                <option value="cross-sell">Cross-sell</option>
+                <option value="up-sell">Up-sell</option>
+                <option value="accessory">Accessory</option>
+              </select>
+            </div>
+            <label class="control-label col-sm-2" for="status">Status:</label>
+            <div class="col-sm-4">
+              <select class="form-control" id="status">
+                <option value="active" selected>Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- CONFIDENCE -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="confidence_score">Confidence Score:</label>
+            <div class="col-sm-4">
+              <input type="number" class="form-control" id="confidence_score" min="0" max="1" step="0.01"
+                placeholder="0.00 - 1.00">
+            </div>
+          </div>
+
+          <!-- PRICING -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="base_product_price">Base Product Price:</label>
+            <div class="col-sm-4">
+              <input type="number" class="form-control" id="base_product_price" step="0.01" placeholder="e.g. 19.99">
+            </div>
+            <label class="control-label col-sm-2" for="recommended_product_price">Recommended Product Price:</label>
+            <div class="col-sm-4">
+              <input type="number" class="form-control" id="recommended_product_price" step="0.01"
+                placeholder="e.g. 9.99">
+            </div>
+          </div>
+
+          <!-- DESCRIPTIONS -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="base_product_description">Base Product Description:</label>
+            <div class="col-sm-10">
+              <textarea class="form-control" id="base_product_description" rows="2"
+                placeholder="Describe the base product"></textarea>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="recommended_product_description">Recommended Product
+              Description:</label>
+            <div class="col-sm-10">
+              <textarea class="form-control" id="recommended_product_description" rows="2"
+                placeholder="Describe the recommended product"></textarea>
+            </div>
+          </div>
+
+          <!-- METADATA -->
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="created_date">Created:</label>
+            <div class="col-sm-4">
+              <input type="text" class="form-control" id="created_date" placeholder="auto populated" readonly>
+            </div>
+            <label class="control-label col-sm-2" for="updated_date">Updated:</label>
+            <div class="col-sm-4">
+              <input type="text" class="form-control" id="updated_date" placeholder="auto populated" readonly>
+            </div>
+          </div>
+
+          <!-- SUBMIT BUTTONS -->
+          <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-10">
+              <button type="submit" class="btn btn-info" id="list-btn">List</button>
+              <button type="submit" class="btn btn-primary" id="query-btn">Query</button>
+              <button type="submit" class="btn btn-success" id="create-btn">Create</button>
+              <button type="submit" class="btn btn-warning" id="update-btn">Update</button>
+              <button type="submit" class="btn btn-primary" id="clear-btn">Clear</button>
+            </div>
+          </div>
+        </div> <!-- form horizontal -->
+      </div> <!-- end well -->
+    </div> <!-- end Form -->
+
+    <!-- Discount Application Section -->
+    <div class="col-md-12" id="discount_section">
+      <h3>Apply Discounts to Recommendations:</h3>
+      <div class="well">
+        <!-- Flat Discount Mode -->
+        <div class="panel panel-primary">
+          <div class="panel-heading">
+            <h4 class="panel-title">Apply Flat Discount to All Accessory Recommendations</h4>
+          </div>
+          <div class="panel-body">
+            <div class="form-horizontal">
+              <div class="form-group">
+                <label class="control-label col-sm-3" for="flat_discount">Discount Percentage:</label>
+                <div class="col-sm-4">
+                  <input type="number" class="form-control" id="flat_discount" min="0" max="99.99" step="0.01"
+                    placeholder="Enter discount (0-100)">
+                  <small class="help-block">Enter a discount percentage between 0 and 100 (exclusive)</small>
+                </div>
+                <div class="col-sm-5">
+                  <button type="submit" class="btn btn-primary" id="apply-flat-discount-btn">Apply Flat Discount</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Discount Mode -->
+        <div class="panel panel-info">
+          <div class="panel-heading">
+            <h4 class="panel-title">Apply Custom Per-Recommendation Discounts</h4>
+          </div>
+          <div class="panel-body">
+            <!-- Add New Discount Entry Form -->
+            <div class="form-horizontal" id="add-discount-form">
+              <div class="form-group">
+                <label class="control-label col-sm-2" for="custom_rec_id">Recommendation ID:</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_rec_id" placeholder="Enter ID" min="1">
+                </div>
+                <label class="control-label col-sm-2" for="custom_base_discount">Base Product Discount (%):</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_base_discount" min="0" max="99.99" step="0.01" placeholder="0-100">
+                </div>
+                <div class="col-sm-2">
+                  <button type="button" class="btn btn-success" id="add-discount-entry-btn">Add Entry</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="control-label col-sm-2" for="custom_rec_discount">Recommended Product Discount (%):</label>
+                <div class="col-sm-3">
+                  <input type="number" class="form-control" id="custom_rec_discount" min="0" max="99.99" step="0.01" placeholder="0-100">
+                </div>
+                <div class="col-sm-7">
+                  <small class="help-block">Enter at least one discount value (base and/or recommended). Discounts must be between 0 and 100 (exclusive).</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Discount Entries List -->
+            <div id="discount-entries-container" style="margin-top: 20px;">
+              <h5>Discount Entries:</h5>
+              <div id="discount-entries-list">
+                <p class="text-muted" id="no-entries-message">No discount entries added yet. Add entries above.</p>
+              </div>
+            </div>
+
+            <!-- Apply Button -->
+            <div class="form-group" style="margin-top: 20px;">
+              <div class="col-sm-12">
+                <button type="submit" class="btn btn-info" id="apply-custom-discount-btn">Apply Custom Discounts</button>
+                <button type="button" class="btn btn-default" id="clear-discount-entries-btn">Clear All Entries</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discount Results -->
+        <div id="discount_results" style="display: none;">
+          <div class="alert alert-success" id="discount_success_message"></div>
+          <div class="alert alert-danger" id="discount_error_message" style="display: none;"></div>
+          <div id="discount_updated_ids"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Results -->
+    <div class="table-responsive col-md-12" id="search_results">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th class="col-md-1">ID</th>
+            <th class="col-md-2">Base Product ID</th>
+            <th class="col-md-2">Recommended Product ID</th>
+            <th class="col-md-2">Type</th>
+            <th class="col-md-1">Status</th>
+            <th class="col-md-1">Confidence</th>
+            <th class="col-md-1">Base Price</th>
+            <th class="col-md-1">Recommended Price</th>
+            <th class="col-md-3">Base Description</th>
+            <th class="col-md-3">Recommended Description</th>
+            <th class="col-md-2">Created</th>
+            <th class="col-md-2">Updated</th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+
+    <footer>
+      <br><br>
+      <p>&copy; NYU DevOps Company 2022</p>
+    </footer>
+
+  </div> <!-- container -->
+
+  <script type="text/javascript" src="static/js/jquery-3.6.0.min.js"></script>
+  <script type="text/javascript" src="static/js/bootstrap.min.js"></script>
+
+  <!-- YOUR REST API -->
+  <script type="text/javascript" src="static/js/rest_api.js"></script>
+
+</body>
+
+</html>

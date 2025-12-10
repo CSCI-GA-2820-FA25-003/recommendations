@@ -11,7 +11,8 @@ from service.models import Recommendation
 
 
 def _fake_confidence() -> Decimal:
-    return Decimal(str(round(random.uniform(0, 1), 2)))
+    # Generate a value in [0.00, 0.99] to satisfy DBs with NUMERIC(2,2)
+    return Decimal(random.randrange(0, 100)) / Decimal(100)
     # return Decimal(random.randrange(-99, 100)) / Decimal(100)
 
 

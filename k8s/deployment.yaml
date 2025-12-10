@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendations
+  labels: 
+    app: recommendations
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0%
+      maxUnavailable: 50%
+  selector:
+    matchLabels:
+      app: recommendations
+  template:
+    metadata:
+      labels:
+        app: recommendations
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: recommendations
+          image: cluster-registry:5000/recommendations:latest   # replace with your real image later
+          imagePullPolicy: IfNotPresent
+          command: ["gunicorn"]
+          args: ["--chdir", "/app", "--bind", "0.0.0.0:8080", "wsgi:app"]
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: RETRY_COUNT
+              value: "10"
+            - name: DATABASE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DATABASE_URI
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

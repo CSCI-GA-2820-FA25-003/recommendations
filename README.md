@@ -2,8 +2,10 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Language-Python-blue.svg)](https://python.org/)
+[![Build](https://github.com/CSCI-GA-2820-FA25-003/recommendations/actions/workflows/ciworkflow.yml/badge.svg)](https://github.com/CSCI-GA-2820-FA25-003/recommendations/actions)
+[![codecov](https://codecov.io/gh/CSCI-GA-2820-FA25-003/recommendations/graph/badge.svg?token=8QZFQZ60YK)](https://codecov.io/gh/CSCI-GA-2820-FA25-003/recommendations)
 
-Flask + SQLAlchemy service for storing simple product-to-product recommendations. The project follows the NYU DevOps microservice pattern and currently exposes endpoints to create, fetch, and delete recommendations while we continue to layer on more features.
+Flask + SQLAlchemy service for storing simple product-to-product recommendations. The project follows the NYU DevOps microservice template and currently exposes endpoints to create, fetch, update, and delete recommendations while we continue to layer on more features.
 
 ---
 
@@ -11,7 +13,7 @@ Flask + SQLAlchemy service for storing simple product-to-product recommendations
 
 - Handles **cross-sell**, **up-sell**, and **accessory** recommendations.
 - Implements validation (enumerated types, numeric ranges, etc.) and returns JSON error payloads via shared error handlers.
-- Ships with a Makefile workflow plus pytest and lint tooling to keep development friction low.
+- Ships with a Makefile workflow plus pytest/lint tooling to keep development friction low.
 - The root `service/` package is the live code path for `wsgi.py`. The nested `recommendations/` folder contains the original course template (UI, Swagger, BDD assets) and is kept only for reference.
 
 ### Architecture
@@ -107,12 +109,33 @@ Create a matching `testdb` database (used by pytest) or adjust the `DATABASE_URI
 
 ```bash
 pipenv shell
-make run          # uses honcho + Procfile (gunicorn) on http://localhost:8080
-# or run the built-in server explicitly:
+make run          # honcho + Procfile (gunicorn) on http://localhost:8080
+# or
 FLASK_APP=wsgi:app FLASK_ENV=development flask run -h 0.0.0.0 -p 8080
 ```
 
-On startup the app factory performs `db.create_all()`, so tables are provisioned automatically.
+The service responds at **http://localhost:8080**. The original Swagger UI (from the archived template) still lives at **http://localhost:8080/apidocs** for future integration work.
+
+![Swagger UI screenshot](image.png)
+
+---
+
+## Additional Setup Options
+
+### Automatic Setup
+
+Click the GitHub **“Use this template”** button to bootstrap a new repository based on this scaffold. All starter files, workflows, and configurations are copied for you.
+
+### Manual Setup
+
+Copy the starter code into an existing project and double-check that hidden files are carried over:
+
+```bash
+cp .gitignore      ../<your_repo_folder>/
+cp .gitattributes  ../<your_repo_folder>/
+```
+
+Use `dot-env-example` as the basis for your configuration (see the `.env` snippet above).
 
 ---
 
@@ -122,10 +145,13 @@ On startup the app factory performs `db.create_all()`, so tables are provisioned
 |--------|-------------|
 | `make install` | Install dependencies into the host environment (used inside containers/GitHub Codespaces). |
 | `make lint` | Run flake8 + pylint with the repo defaults. |
+| `make format` | Auto-format with black/isort. |
 | `make test` | Execute the pytest suite with coverage (95% threshold). |
+| `make coverage` | Generate a full coverage report. |
 | `make run` | Launch the service via honcho + Procfile (`web: gunicorn ...`). |
 | `make clean` | Remove cached Docker layers (helpful before container builds). |
-| `make secret` | Emit a random hex string you can drop into `.env`. |
+| `make build` / `make push` | Build and push the container image. |
+| `make deploy` | Deploy to a local k3d cluster (see `k8s/`). |
 
 Run `make help` for the full catalog, including local k3d helpers.
 
@@ -158,7 +184,7 @@ Coverage reports live in `htmlcov/` after running `pytest --cov` if you want a d
 
 ## API Reference
 
-> Swagger UI has not been wired up yet (the root response references `/apidocs` for future work). Use the examples below or HTTPie/cURL for manual testing.
+> Swagger integration is on the backlog. Use the examples below or HTTPie/cURL for manual testing.
 
 ### `GET /`
 
@@ -185,11 +211,11 @@ Content-Type: application/json
 }
 ```
 
-Response:
+#### Example Response
 
 ```http
 201 Created
-Location: unknown
+Location: unknown   # location header will be wired up when GET by ID returns external URLs
 
 {
   "recommendation_id": 1,
@@ -205,14 +231,6 @@ Location: unknown
   "created_date": "...",
   "updated_date": "..."
 }
-```
-
-Example with HTTPie:
-
-```bash
-http POST :8080/recommendations \
-  base_product_id:=1001 recommended_product_id:=2001 \
-  recommendation_type=cross-sell status=active confidence_score:=0.85
 ```
 
 ### `GET /recommendations/<recommendation_id>`
@@ -235,6 +253,32 @@ GET /recommendations/1
 
 `404 Not Found` is returned if the ID does not exist.
 
+### `PUT /recommendations/<recommendation_id>`
+
+Update selected fields.
+
+```http
+PUT /recommendations/1
+Content-Type: application/json
+
+{
+  "status": "inactive",
+  "confidence_score": 0.6
+}
+```
+
+#### Example Response
+
+```http
+200 OK
+{
+  "recommendation_id": 1,
+  "status": "inactive",
+  "confidence_score": 0.6,
+  ...
+}
+```
+
 ### `DELETE /recommendations/<recommendation_id>`
 
 Remove a recommendation permanently.
@@ -242,6 +286,31 @@ Remove a recommendation permanently.
 ```http
 DELETE /recommendations/1
 → 204 No Content
+```
+
+### `GET /recommendations`
+
+List all recommendations (basic usage until we add query filters).
+
+```http
+GET /recommendations
+→ 200 OK
+[
+  {
+    "recommendation_id": 1,
+    "base_product_id": 1001,
+    "recommended_product_id": 2001,
+    "recommendation_type": "cross-sell",
+    "status": "active"
+  },
+  {
+    "recommendation_id": 2,
+    "base_product_id": 3001,
+    "recommended_product_id": 4001,
+    "recommendation_type": "up-sell",
+    "status": "inactive"
+  }
+]
 ```
 
 ---
@@ -278,7 +347,7 @@ DELETE /recommendations/1
 ## Deployment
 
 - The `Procfile` runs `gunicorn --bind 0.0.0.0:$PORT wsgi:app`, which is what `make run` orchestrates through honcho. Use it locally to mimic production or on platforms like Heroku/Render.
-- `make cluster`, `make deploy`, etc., are scaffolding for running inside a local k3d cluster; supply manifests under `k8s/` (or point `kubectl` at `recommendations/k8s`) if you intend to use those targets.
+- `make cluster`, `make deploy`, etc., are scaffolding for running inside a local k3d cluster; manifests live in `k8s/`.
 
 ---
 
