@@ -139,7 +139,20 @@ spec:
 #################################################
 #               task4: deploy image             #
 #################################################
-
+    - name: deploy-image
+      params:
+        - name: image-name
+          value: $(params.IMAGE_NAME)
+        - name: manifest-dir
+          value: k8s
+      runAfter:
+        - buildah
+      taskRef:
+        kind: Task
+        name: deploy-image
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
 
 #################################################
 #               task5: behave                   #
