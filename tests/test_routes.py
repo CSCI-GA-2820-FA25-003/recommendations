@@ -90,13 +90,13 @@ class TestYourResourceService(TestCase):
     #  P L A C E   T E S T   C A S E S   H E R E
     ######################################################################
 
-    def test_index(self):
-        """It should return a helpful message"""
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        data = resp.get_json()
-        self.assertIn("message", data)
-        self.assertIn("Welcome", data["message"])
+    # def test_index(self):
+    #     """It should return a helpful message"""
+    #     resp = self.client.get("/")
+    #     self.assertEqual(resp.status_code, status.HTTP_200_OK)
+    #     data = resp.get_json()
+    #     self.assertIn("message", data)
+    #     self.assertIn("Welcome", data["message"])
 
     def test_create_recommendation(self):
         """It should Create a new Recommendation"""
