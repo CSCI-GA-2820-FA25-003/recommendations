@@ -3,8 +3,6 @@ kind: Pipeline
 metadata:
   name: recommendations-cd
 spec:
-  description: |
-    Initial CI/CD pipeline skeleton for the Recommendations service
   params:
     - default: 'https://github.com/CSCI-GA-2820-FA25-003/recommendations.git'
       description: URL to the git repo
@@ -46,9 +44,9 @@ spec:
           value: 'false'
         - name: SSL_VERIFY
           value: 'true'
-        - name: url
+        - name: URL
           value: $(params.GIT_REPO)
-        - name: revision
+        - name: REVISION
           value: $(params.GIT_REF)
         - name: REFSPEC
           value: ''
@@ -58,9 +56,15 @@ spec:
           value: '1'
         - name: SPARSE_CHECKOUT_DIRECTORIES
           value: ''
-      taskRef:        
-        kind: Task
-        name: git-clone        
+      taskRef:
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+        resolver: cluster      
       workspaces:
         - name: output
           workspace: pipeline-workspace
@@ -112,7 +116,7 @@ spec:
         - name: IMAGE
           value: $(params.IMAGE_NAME)
         - name: DOCKERFILE
-          value: .devcontainer/Dockerfile
+          value: ./Dockerfile
         - name: CONTEXT
           value: .
         - name: STORAGE_DRIVER
