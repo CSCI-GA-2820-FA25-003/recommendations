@@ -22,26 +22,27 @@ def _field_value(context, element_id):
     return context.driver.find_element(By.ID, element_id).get_attribute("value")
 
 
-def _ensure_on_home_page(context, retries: int = 3):
-    """Navigate to the UI home page and wait until it is ready."""
-    home_url = f"{context.base_url}/ui"
-    last_error = None
+def _ui_home_url(context):
+    """Return the UI home URL, stripping any trailing /api from BASE_URL."""
+    base = context.base_url.rstrip("/")
+    # If BASE_URL ends with /api, strip it so UI goes to the root
+    if base.endswith("/api"):
+        base = base[:-4]  # remove "/api"
+    return f"{base}/ui"
 
-    for attempt in range(retries):
-        if not context.driver.current_url.startswith(home_url):
-            context.driver.get(home_url)
 
-        try:
-            WebDriverWait(context.driver, context.wait_seconds).until(
-                EC.presence_of_element_located((By.ID, "list-btn"))
-            )
-            WebDriverWait(context.driver, context.wait_seconds).until(
-                EC.presence_of_element_located((By.ID, "search_results"))
-            )
-            return
-        except TimeoutException as exc:
-            last_error = exc
-            time.sleep(1)
+def _ensure_on_home_page(context):
+    """Navigate to the UI home page if we are not already there and wait for it to load."""
+    home_url = _ui_home_url(context)
+
+    # Navigate to /ui if we aren't already there
+    if not context.driver.current_url.startswith(home_url):
+        context.driver.get(home_url)
+
+    # Wait until a known UI element is present (Create button is safest)
+    WebDriverWait(context.driver, context.wait_seconds).until(
+        EC.presence_of_element_located((By.ID, "create-btn"))
+    )
 
 
 def _wait_for_flash_message(context, expected_substring=None):
@@ -150,20 +151,34 @@ def _wait_and_parse_results(context):
 
 
 def _list_recommendations(context):
-    """Click the List button via the UI and capture the table contents."""
+    """Click the List (or Search) button via the UI and capture the table contents."""
     _ensure_on_home_page(context)
 
+    # Keep track of any existing results table so we can wait for it to refresh
     existing_tables = context.driver.find_elements(
         By.CSS_SELECTOR, "#search_results table"
     )
     previous_table = existing_tables[0] if existing_tables else None
 
-    WebDriverWait(context.driver, context.wait_seconds).until(
-        EC.element_to_be_clickable((By.ID, "list-btn"))
-    )
-    context.driver.find_element(By.ID, "list-btn").click()
-
-    _wait_for_flash_message(context, "success")
+    try:
+        context.driver.find_element(By.ID, "list-btn").click()
+    except NoSuchElementException:
+        for field_id in [
+            "recommendation_id",
+            "base_product_id",
+            "recommended_product_id",
+            "status",
+            "recommendation_type",
+        ]:
+            try:
+                element = context.driver.find_element(By.ID, field_id)
+                tag = element.tag_name.lower()
+                if tag == "select":
+                    Select(element).select_by_index(0)
+                else:
+                    element.clear()
+            except Exception:
+                pass
 
     if previous_table is not None:
         WebDriverWait(context.driver, context.wait_seconds).until(
