@@ -325,9 +325,17 @@ def _label_to_element_id(field_label: str) -> str:
 def step_should_see_in_field(context, expected, field_label):
     element_id = _label_to_element_id(field_label)
     value = _field_value(context, element_id)
-    assert str(expected) == str(
-        value
-    ), f"Expected {expected} in {field_label}, got {value}"
+    # Normalize numeric values for comparison (handle trailing zeros)
+    try:
+        expected_float = float(expected)
+        value_float = float(value)
+        assert abs(expected_float - value_float) < 0.0001, \
+            f"Expected {expected} in {field_label}, got {value}"
+    except (ValueError, TypeError):
+        # Not numeric, do exact string comparison
+        assert str(expected) == str(
+            value
+        ), f"Expected {expected} in {field_label}, got {value}"
 
 
 @then('I should see "{expected}" in the "{field_label}" dropdown')
